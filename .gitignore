@@ -1,0 +1,9 @@
+# Extension files
+*.crx
+*.pem
+.DS_Store
+
+# Optional icon files (add if you create them)
+# icon16.png
+# icon48.png
+# icon128.png
