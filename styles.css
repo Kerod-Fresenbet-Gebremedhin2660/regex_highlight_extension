@@ -109,6 +109,35 @@
     background-color: #a0a0a0;
 }
 
+.regex-pattern-history {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+    max-height: 60px;
+    overflow-y: auto;
+}
+
+.regex-pattern-chip {
+    padding: 3px 8px;
+    border: 1px solid #ccc;
+    border-radius: 12px;
+    background-color: #f0f0f0;
+    color: #333;
+    font-size: 11px;
+    cursor: pointer;
+    white-space: nowrap;
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: background-color 0.2s;
+}
+
+.regex-pattern-chip:hover {
+    background-color: #e0e0e0;
+    border-color: #808080;
+}
+
 .regex-navigation {
     display: flex;
     align-items: center;
