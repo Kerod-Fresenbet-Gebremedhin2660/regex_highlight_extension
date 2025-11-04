@@ -13,6 +13,11 @@ class RegexHighlighter {
         this.scrollHandler = null;
         this.savedPatterns = this.loadSavedPatterns();
         this.maxSavedPatterns = 8;
+        this.isDragging = false;
+        this.dragStartX = 0;
+        this.dragStartY = 0;
+        this.dragStartLeft = 0;
+        this.dragStartTop = 0;
         this.init();
     }
 
@@ -46,7 +51,10 @@ class RegexHighlighter {
             overlay.classList.add('minimized');
         }
         overlay.innerHTML = `
-      <button id="regex-minimize-btn" class="regex-minimize-btn">${this.isMinimized ? '+' : '−'}</button>
+      <div class="regex-drag-handle">
+        <span class="regex-drag-icon">⋮⋮</span>
+        <button id="regex-minimize-btn" class="regex-minimize-btn">${this.isMinimized ? '+' : '−'}</button>
+      </div>
       <div class="regex-search-container">
         <input type="text" id="regex-search-input" placeholder="Enter regex pattern (e.g., (dog|cat))" />
         <button id="regex-search-btn">Search</button>
@@ -61,6 +69,12 @@ class RegexHighlighter {
     `;
         document.body.appendChild(overlay);
 
+        // Load saved position
+        this.loadPosition(overlay);
+
+        // Setup drag functionality
+        this.setupDragging(overlay);
+
         // Event listeners
         const minimizeBtn = document.getElementById('regex-minimize-btn');
 
@@ -68,6 +82,9 @@ class RegexHighlighter {
         if (minimizeBtn) {
             minimizeBtn.title = this.isMinimized ? 'Expand' : 'Minimize';
         }
+
+        // Store overlay reference for dragging
+        this.overlay = overlay;
         const searchInput = document.getElementById('regex-search-input');
         const searchBtn = document.getElementById('regex-search-btn');
         const clearBtn = document.getElementById('regex-clear-btn');
@@ -330,14 +347,280 @@ class RegexHighlighter {
 
         if (overlay) {
             if (this.isMinimized) {
+                // Store current position before minimizing (for when we expand)
+                const rect = overlay.getBoundingClientRect();
+                if (!overlay.dataset.expandedTop) {
+                    overlay.dataset.expandedTop = rect.top;
+                }
+                if (!overlay.dataset.expandedLeft) {
+                    overlay.dataset.expandedLeft = rect.left;
+                }
+
                 overlay.classList.add('minimized');
                 minimizeBtn.textContent = '+';
                 minimizeBtn.title = 'Expand';
+
+                // Force to right corner (CSS will handle with !important)
+                // Just ensure top is preserved
+                overlay.style.top = rect.top + 'px';
             } else {
                 overlay.classList.remove('minimized');
                 minimizeBtn.textContent = '−';
                 minimizeBtn.title = 'Minimize';
+
+                // Restore previous position if available, otherwise use saved position
+                const rect = overlay.getBoundingClientRect();
+                const savedTop = overlay.dataset.expandedTop;
+                const savedLeft = overlay.dataset.expandedLeft;
+
+                if (savedTop !== undefined) {
+                    overlay.style.top = savedTop + 'px';
+                }
+
+                // Load saved position or use default
+                this.loadPosition(overlay);
             }
+        }
+    }
+
+    setupDragging(overlay) {
+        const dragHandle = overlay.querySelector('.regex-drag-handle');
+        if (!dragHandle) return;
+
+        let rafId = null;
+
+        const handleMove = (clientX, clientY) => {
+            if (!this.isDragging) return;
+
+            const deltaX = clientX - this.dragStartX;
+            const deltaY = clientY - this.dragStartY;
+
+            // Get current dimensions (before transform)
+            const width = overlay.offsetWidth || overlay.getBoundingClientRect().width;
+            const height = overlay.offsetHeight || overlay.getBoundingClientRect().height;
+
+            // Calculate desired position
+            let newLeft = this.dragStartLeft + deltaX;
+            let newTop = this.dragStartTop + deltaY;
+
+            // Keep widget within viewport bounds
+            const maxLeft = window.innerWidth - width;
+            const maxTop = window.innerHeight - height;
+
+            // Clamp to bounds and adjust delta if needed
+            if (newLeft < 0) {
+                newLeft = 0;
+            } else if (newLeft > maxLeft) {
+                newLeft = maxLeft;
+            }
+
+            if (newTop < 0) {
+                newTop = 0;
+            } else if (newTop > maxTop) {
+                newTop = maxTop;
+            }
+
+            // Use transform for better performance during drag
+            const finalDeltaX = newLeft - this.dragStartLeft;
+            const finalDeltaY = newTop - this.dragStartTop;
+            overlay.style.transform = `translate(${finalDeltaX}px, ${finalDeltaY}px)`;
+        };
+
+        const handleMoveRAF = (clientX, clientY) => {
+            if (rafId) {
+                cancelAnimationFrame(rafId);
+            }
+            rafId = requestAnimationFrame(() => {
+                handleMove(clientX, clientY);
+            });
+        };
+
+        dragHandle.addEventListener('mousedown', (e) => {
+            // Don't drag if clicking the minimize button
+            if (e.target.id === 'regex-minimize-btn' || e.target.closest('#regex-minimize-btn')) return;
+
+            this.isDragging = true;
+            this.dragStartX = e.clientX;
+            this.dragStartY = e.clientY;
+
+            const rect = overlay.getBoundingClientRect();
+            this.dragStartLeft = rect.left;
+            this.dragStartTop = rect.top;
+
+            // Store initial position if not already set
+            if (!overlay.dataset.initialLeft) {
+                overlay.dataset.initialLeft = this.dragStartLeft;
+                overlay.dataset.initialTop = this.dragStartTop;
+            }
+
+            overlay.style.cursor = 'grabbing';
+            dragHandle.style.cursor = 'grabbing';
+            overlay.style.transition = 'none'; // Disable transition during drag
+
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!this.isDragging) return;
+            handleMoveRAF(e.clientX, e.clientY);
+            e.preventDefault();
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (this.isDragging) {
+                if (rafId) {
+                    cancelAnimationFrame(rafId);
+                    rafId = null;
+                }
+
+                // Apply final position
+                const rect = overlay.getBoundingClientRect();
+                const finalLeft = rect.left;
+                const finalTop = rect.top;
+
+                // Reset transform and set final position
+                overlay.style.transform = '';
+                overlay.style.transition = ''; // Re-enable transition
+                overlay.style.left = finalLeft + 'px';
+                overlay.style.top = finalTop + 'px';
+                overlay.style.right = 'auto';
+                overlay.style.bottom = 'auto';
+
+                this.isDragging = false;
+                overlay.style.cursor = '';
+                dragHandle.style.cursor = '';
+                this.savePosition(overlay);
+            }
+        });
+
+        // Touch events for mobile
+        dragHandle.addEventListener('touchstart', (e) => {
+            if (e.target.id === 'regex-minimize-btn' || e.target.closest('#regex-minimize-btn')) return;
+
+            const touch = e.touches[0];
+            this.isDragging = true;
+            this.dragStartX = touch.clientX;
+            this.dragStartY = touch.clientY;
+
+            const rect = overlay.getBoundingClientRect();
+            this.dragStartLeft = rect.left;
+            this.dragStartTop = rect.top;
+
+            if (!overlay.dataset.initialLeft) {
+                overlay.dataset.initialLeft = this.dragStartLeft;
+                overlay.dataset.initialTop = this.dragStartTop;
+            }
+
+            overlay.style.transition = 'none';
+
+            e.preventDefault();
+        });
+
+        document.addEventListener('touchmove', (e) => {
+            if (!this.isDragging) return;
+
+            const touch = e.touches[0];
+            handleMoveRAF(touch.clientX, touch.clientY);
+
+            e.preventDefault();
+        });
+
+        document.addEventListener('touchend', () => {
+            if (this.isDragging) {
+                if (rafId) {
+                    cancelAnimationFrame(rafId);
+                    rafId = null;
+                }
+
+                const rect = overlay.getBoundingClientRect();
+                const finalLeft = rect.left;
+                const finalTop = rect.top;
+
+                overlay.style.transform = '';
+                overlay.style.transition = '';
+                overlay.style.left = finalLeft + 'px';
+                overlay.style.top = finalTop + 'px';
+                overlay.style.right = 'auto';
+                overlay.style.bottom = 'auto';
+
+                this.isDragging = false;
+                this.savePosition(overlay);
+            }
+        });
+
+        // Handle window resize to keep widget in bounds
+        let resizeTimeout;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(() => {
+                if (!this.isDragging) {
+                    const rect = overlay.getBoundingClientRect();
+                    const width = rect.width;
+                    const height = rect.height;
+                    const currentLeft = rect.left;
+                    const currentTop = rect.top;
+
+                    const maxLeft = window.innerWidth - width;
+                    const maxTop = window.innerHeight - height;
+
+                    const newLeft = Math.max(0, Math.min(currentLeft, maxLeft));
+                    const newTop = Math.max(0, Math.min(currentTop, maxTop));
+
+                    if (newLeft !== currentLeft || newTop !== currentTop) {
+                        overlay.style.left = newLeft + 'px';
+                        overlay.style.top = newTop + 'px';
+                        this.savePosition(overlay);
+                    }
+                }
+            }, 100);
+        });
+    }
+
+    savePosition(overlay) {
+        const rect = overlay.getBoundingClientRect();
+        // Ensure position is within bounds before saving
+        const width = rect.width;
+        const height = rect.height;
+        const maxLeft = window.innerWidth - width;
+        const maxTop = window.innerHeight - height;
+
+        const clampedLeft = Math.max(0, Math.min(rect.left, maxLeft));
+        const clampedTop = Math.max(0, Math.min(rect.top, maxTop));
+
+        const position = {
+            left: clampedLeft,
+            top: clampedTop
+        };
+        try {
+            localStorage.setItem('regex-highlight-position', JSON.stringify(position));
+        } catch (e) {
+            console.warn('Could not save position to localStorage', e);
+        }
+    }
+
+    loadPosition(overlay) {
+        try {
+            const saved = localStorage.getItem('regex-highlight-position');
+            if (saved) {
+                const position = JSON.parse(saved);
+                // Ensure loaded position is within viewport
+                const rect = overlay.getBoundingClientRect();
+                const width = rect.width || 220; // fallback to min-width
+                const height = rect.height || 100; // fallback estimate
+
+                const maxLeft = window.innerWidth - width;
+                const maxTop = window.innerHeight - height;
+
+                const clampedLeft = Math.max(0, Math.min(position.left, maxLeft));
+                const clampedTop = Math.max(0, Math.min(position.top, maxTop));
+
+                overlay.style.left = clampedLeft + 'px';
+                overlay.style.top = clampedTop + 'px';
+                overlay.style.right = 'auto';
+                overlay.style.bottom = 'auto';
+            }
+        } catch (e) {
+            // Ignore errors, use default position
         }
     }
 
