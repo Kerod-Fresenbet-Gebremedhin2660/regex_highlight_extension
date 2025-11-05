@@ -246,3 +246,52 @@
     outline: 2px solid #ff9800;
     outline-offset: 1px;
 }
+
+/* Scrollbar markers */
+.regex-scrollbar-markers {
+    position: fixed;
+    right: 0;
+    top: 10px;
+    bottom: 10px;
+    width: 12px;
+    z-index: 999998;
+    pointer-events: none;
+    padding: 10px 2px;
+    box-sizing: border-box;
+}
+
+.regex-scrollbar-marker {
+    position: absolute;
+    right: 0;
+    width: 8px;
+    height: 8px;
+    background-color: #ffeb3b;
+    border: 1px solid #fbc02d;
+    border-radius: 50%;
+    cursor: pointer;
+    pointer-events: auto;
+    transform: translateY(-50%);
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.regex-scrollbar-marker:hover {
+    width: 10px;
+    height: 10px;
+    background-color: #fbc02d;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.regex-scrollbar-marker.active {
+    width: 10px;
+    height: 10px;
+    background-color: #ff9800;
+    border-color: #f57c00;
+    box-shadow: 0 0 4px rgba(255, 152, 0, 0.6), 0 2px 4px rgba(0, 0, 0, 0.3);
+    z-index: 1;
+}
+
+/* Hide markers when widget is minimized if desired */
+#regex-highlight-ui.minimized~.regex-scrollbar-markers {
+    display: block;
+}

@@ -18,6 +18,7 @@ class RegexHighlighter {
         this.dragStartY = 0;
         this.dragStartLeft = 0;
         this.dragStartTop = 0;
+        this.scrollbarMarkerContainer = null;
         this.init();
     }
 
@@ -120,12 +121,29 @@ class RegexHighlighter {
         // Render saved patterns
         this.renderSavedPatterns();
 
+        // Create scrollbar markers
+        this.createScrollbarMarkers();
+
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
             if (e.ctrlKey || e.metaKey) {
-                if (e.key === 'f' || e.key === 'F') {
+                if ((e.key === 'f' || e.key === 'F') && !e.shiftKey) {
                     e.preventDefault();
-                    searchInput.focus();
+                    if (this.isMinimized) {
+                        // If minimized: unminimize and focus search
+                        this.toggleMinimize();
+                        // Small delay to ensure widget is expanded before focusing
+                        setTimeout(() => {
+                            const input = document.getElementById('regex-search-input');
+                            if (input) {
+                                input.focus();
+                                input.select(); // Select existing text for easy replacement
+                            }
+                        }, 50);
+                    } else {
+                        // If maximized: minimize
+                        this.toggleMinimize();
+                    }
                 }
             }
             if (e.key === 'F3' || (e.shiftKey && e.key === 'F3')) {
@@ -157,6 +175,8 @@ class RegexHighlighter {
             this.setupScrollTracking();
             // Update pattern history display
             this.renderSavedPatterns();
+            // Update scrollbar markers
+            this.updateScrollbarMarkers();
         } catch (error) {
             alert(`Invalid regex pattern: ${error.message}`);
         }
@@ -271,11 +291,13 @@ class RegexHighlighter {
 
         this.matches = [];
         this.currentIndex = -1;
+        this.clearScrollbarMarkers();
     }
 
     clear() {
         this.clearHighlights();
         this.updateNavigation();
+        this.clearScrollbarMarkers();
     }
 
     next() {
@@ -289,6 +311,7 @@ class RegexHighlighter {
         this.currentIndex = (this.currentIndex + 1) % this.matches.length;
         this.scrollToMatch(this.currentIndex);
         this.updateNavigation();
+        this.updateScrollbarMarkers();
     }
 
     previous() {
@@ -304,6 +327,7 @@ class RegexHighlighter {
             : this.currentIndex - 1;
         this.scrollToMatch(this.currentIndex);
         this.updateNavigation();
+        this.updateScrollbarMarkers();
     }
 
     scrollToMatch(index) {
@@ -323,6 +347,7 @@ class RegexHighlighter {
         // Reset flag after scroll animation completes
         setTimeout(() => {
             this.isScrollingProgrammatically = false;
+            this.updateScrollbarMarkers();
         }, 500);
     }
 
@@ -572,6 +597,8 @@ class RegexHighlighter {
                         this.savePosition(overlay);
                     }
                 }
+                // Update scrollbar markers on resize
+                this.updateScrollbarMarkers();
             }, 100);
         });
     }
@@ -728,6 +755,93 @@ class RegexHighlighter {
             }
 
             this.updateNavigation();
+            this.updateScrollbarMarkers();
+        }
+    }
+
+    createScrollbarMarkers() {
+        // Remove existing marker container if any
+        const existing = document.getElementById('regex-scrollbar-markers');
+        if (existing) {
+            existing.remove();
+        }
+
+        // Create marker container
+        const container = document.createElement('div');
+        container.id = 'regex-scrollbar-markers';
+        container.className = 'regex-scrollbar-markers';
+        document.body.appendChild(container);
+
+        this.scrollbarMarkerContainer = container;
+    }
+
+    updateScrollbarMarkers() {
+        if (!this.scrollbarMarkerContainer || this.matches.length === 0) {
+            this.clearScrollbarMarkers();
+            return;
+        }
+
+        const container = this.scrollbarMarkerContainer;
+        container.innerHTML = '';
+
+        // Get page dimensions
+        const documentHeight = Math.max(
+            document.body.scrollHeight,
+            document.body.offsetHeight,
+            document.documentElement.clientHeight,
+            document.documentElement.scrollHeight,
+            document.documentElement.offsetHeight
+        );
+        const viewportHeight = window.innerHeight;
+
+        if (documentHeight <= viewportHeight) {
+            // Page doesn't scroll, no markers needed
+            return;
+        }
+
+        // Calculate scrollbar track height
+        const scrollbarTrackHeight = viewportHeight - 20; // Account for padding
+        const scrollRatio = scrollbarTrackHeight / documentHeight;
+
+        // Create markers for each match
+        this.matches.forEach((match, index) => {
+            if (!match.span) return;
+
+            const rect = match.span.getBoundingClientRect();
+            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+            const elementTop = scrollTop + rect.top;
+
+            // Calculate position as percentage of document height
+            const positionPercent = (elementTop / documentHeight) * 100;
+
+            // Position marker on scrollbar
+            const markerTop = (positionPercent / 100) * scrollbarTrackHeight;
+
+            // Create marker element
+            const marker = document.createElement('div');
+            marker.className = 'regex-scrollbar-marker';
+            marker.dataset.matchIndex = index;
+
+            if (index === this.currentIndex) {
+                marker.classList.add('active');
+            }
+
+            marker.style.top = markerTop + 'px';
+            marker.title = `Match ${index + 1} of ${this.matches.length}`;
+
+            // Click handler to jump to match
+            marker.addEventListener('click', () => {
+                this.currentIndex = index;
+                this.scrollToMatch(index);
+            });
+
+            container.appendChild(marker);
+        });
+    }
+
+    clearScrollbarMarkers() {
+        if (this.scrollbarMarkerContainer) {
+            this.scrollbarMarkerContainer.innerHTML = '';
         }
     }
 
