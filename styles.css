@@ -74,25 +74,25 @@
     right: 4px;
     width: 20px;
     height: 20px;
-    padding: 0;
-    margin: 0;
-    border: none;
-    border-radius: 3px;
-    background-color: #808080;
-    color: #000000;
-    font-size: 16px;
-    font-weight: bold;
-    line-height: 1;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background-color 0.2s;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    border-radius: 3px !important;
+    background-color: #808080 !important;
+    color: #000000 !important;
+    font-size: 16px !important;
+    font-weight: bold !important;
+    line-height: 1 !important;
+    cursor: pointer !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    transition: background-color 0.2s !important;
     z-index: 2;
 }
 
 .regex-minimize-btn:hover {
-    background-color: #a0a0a0;
+    background-color: #a0a0a0 !important;
 }
 
 #regex-highlight-ui.minimized .regex-minimize-btn {
@@ -135,33 +135,33 @@
 }
 
 .regex-search-container button {
-    padding: 6px 12px;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 13px;
-    font-weight: 500;
-    transition: background-color 0.2s;
-    background-color: #808080;
-    color: #000000;
+    padding: 6px 12px !important;
+    border: none !important;
+    border-radius: 4px !important;
+    cursor: pointer !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    transition: background-color 0.2s !important;
+    background-color: #808080 !important;
+    color: #000000 !important;
 }
 
 #regex-search-btn {
-    background-color: #808080;
-    color: #000000;
+    background-color: #808080 !important;
+    color: #000000 !important;
 }
 
 #regex-search-btn:hover {
-    background-color: #a0a0a0;
+    background-color: #a0a0a0 !important;
 }
 
 #regex-clear-btn {
-    background-color: #808080;
-    color: #000000;
+    background-color: #808080 !important;
+    color: #000000 !important;
 }
 
 #regex-clear-btn:hover {
-    background-color: #a0a0a0;
+    background-color: #a0a0a0 !important;
 }
 
 .regex-settings {
@@ -189,6 +189,38 @@
 
 .regex-setting-toggle span {
     flex: 1;
+}
+
+.regex-flags-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #e0e0e0;
+}
+
+.regex-flag-label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: #555;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+}
+
+.regex-flag-label input[type="checkbox"] {
+    cursor: pointer;
+    margin: 0;
+    width: 14px;
+    height: 14px;
+}
+
+.regex-flag-label span {
+    font-family: 'Courier New', monospace;
+    font-weight: 600;
 }
 
 .regex-pattern-history {
@@ -263,22 +295,23 @@
 
 #regex-prev-btn,
 #regex-next-btn {
-    background-color: #808080;
-    color: #000000;
-    padding: 5px 10px;
-    font-size: 12px;
+    background-color: #808080 !important;
+    color: #000000 !important;
+    padding: 5px 10px !important;
+    font-size: 12px !important;
 }
 
 #regex-prev-btn:hover:not(:disabled),
 #regex-next-btn:hover:not(:disabled) {
-    background-color: #a0a0a0;
+    background-color: #a0a0a0 !important;
 }
 
 #regex-prev-btn:disabled,
 #regex-next-btn:disabled {
-    background-color: #bdc3c7;
-    cursor: not-allowed;
-    opacity: 0.6;
+    background-color: #bdc3c7 !important;
+    color: #000000 !important;
+    cursor: not-allowed !important;
+    opacity: 0.6 !important;
 }
 
 #regex-match-counter {

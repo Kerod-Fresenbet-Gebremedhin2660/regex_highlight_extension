@@ -21,7 +21,23 @@ class RegexHighlighter {
         this.scrollbarMarkerContainer = null;
         this.scrollOnSearch = this.loadSetting('scrollOnSearch', false);
         this.matchTypes = []; // Store alternative types for multi-type coloring
+        // Regex flags - default to 'gi' (global and case-insensitive) to match current behavior
+        this.regexFlags = {
+            global: this.loadSetting('regexFlagGlobal', true),
+            ignoreCase: this.loadSetting('regexFlagIgnoreCase', true),
+            multiline: this.loadSetting('regexFlagMultiline', false),
+            dotAll: this.loadSetting('regexFlagDotAll', false)
+        };
         this.init();
+    }
+
+    getRegexFlagsString() {
+        let flags = '';
+        if (this.regexFlags.global) flags += 'g';
+        if (this.regexFlags.ignoreCase) flags += 'i';
+        if (this.regexFlags.multiline) flags += 'm';
+        if (this.regexFlags.dotAll) flags += 's';
+        return flags;
     }
 
     init() {
@@ -69,6 +85,24 @@ class RegexHighlighter {
             <input type="checkbox" id="regex-scroll-on-search" ${this.scrollOnSearch ? 'checked' : ''}>
             <span>Scroll to first match on search</span>
           </label>
+          <div class="regex-flags-container">
+            <label class="regex-flag-label" title="Global: Find all matches (not just first)">
+              <input type="checkbox" id="regex-flag-global" ${this.regexFlags.global ? 'checked' : ''}>
+              <span>g (Global)</span>
+            </label>
+            <label class="regex-flag-label" title="Case-insensitive">
+              <input type="checkbox" id="regex-flag-ignorecase" ${this.regexFlags.ignoreCase ? 'checked' : ''}>
+              <span>i (Ignore Case)</span>
+            </label>
+            <label class="regex-flag-label" title="Multiline: ^ and $ match line breaks">
+              <input type="checkbox" id="regex-flag-multiline" ${this.regexFlags.multiline ? 'checked' : ''}>
+              <span>m (Multiline)</span>
+            </label>
+            <label class="regex-flag-label" title="DotAll: . matches newline">
+              <input type="checkbox" id="regex-flag-dotall" ${this.regexFlags.dotAll ? 'checked' : ''}>
+              <span>s (DotAll)</span>
+            </label>
+          </div>
         </div>
         <div id="regex-pattern-history" class="regex-pattern-history"></div>
         <div class="regex-navigation">
@@ -102,12 +136,42 @@ class RegexHighlighter {
         const prevBtn = document.getElementById('regex-prev-btn');
         const nextBtn = document.getElementById('regex-next-btn');
         const scrollOnSearchCheckbox = document.getElementById('regex-scroll-on-search');
+        const flagGlobalCheckbox = document.getElementById('regex-flag-global');
+        const flagIgnoreCaseCheckbox = document.getElementById('regex-flag-ignorecase');
+        const flagMultilineCheckbox = document.getElementById('regex-flag-multiline');
+        const flagDotAllCheckbox = document.getElementById('regex-flag-dotall');
 
         // Setting toggle handler
         if (scrollOnSearchCheckbox) {
             scrollOnSearchCheckbox.addEventListener('change', (e) => {
                 this.scrollOnSearch = e.target.checked;
                 this.saveSetting('scrollOnSearch', this.scrollOnSearch);
+            });
+        }
+
+        // Regex flag handlers
+        if (flagGlobalCheckbox) {
+            flagGlobalCheckbox.addEventListener('change', (e) => {
+                this.regexFlags.global = e.target.checked;
+                this.saveSetting('regexFlagGlobal', this.regexFlags.global);
+            });
+        }
+        if (flagIgnoreCaseCheckbox) {
+            flagIgnoreCaseCheckbox.addEventListener('change', (e) => {
+                this.regexFlags.ignoreCase = e.target.checked;
+                this.saveSetting('regexFlagIgnoreCase', this.regexFlags.ignoreCase);
+            });
+        }
+        if (flagMultilineCheckbox) {
+            flagMultilineCheckbox.addEventListener('change', (e) => {
+                this.regexFlags.multiline = e.target.checked;
+                this.saveSetting('regexFlagMultiline', this.regexFlags.multiline);
+            });
+        }
+        if (flagDotAllCheckbox) {
+            flagDotAllCheckbox.addEventListener('change', (e) => {
+                this.regexFlags.dotAll = e.target.checked;
+                this.saveSetting('regexFlagDotAll', this.regexFlags.dotAll);
             });
         }
 
@@ -292,17 +356,25 @@ class RegexHighlighter {
             return null;
         }
 
-        // Test which alternative matches the text (case-insensitive)
+        // Test which alternative matches the text
+        // Use 'i' flag if ignoreCase is enabled, otherwise no flags
+        const altFlags = this.regexFlags.ignoreCase ? 'i' : '';
         for (let i = 0; i < alternatives.length; i++) {
             try {
-                const altRegex = new RegExp('^' + alternatives[i] + '$', 'i');
+                const altRegex = new RegExp('^' + alternatives[i] + '$', altFlags);
                 if (altRegex.test(matchedText)) {
                     return i;
                 }
             } catch (e) {
                 // If alternative is not a valid regex, try exact match
-                if (matchedText.toLowerCase() === alternatives[i].toLowerCase()) {
-                    return i;
+                if (this.regexFlags.ignoreCase) {
+                    if (matchedText.toLowerCase() === alternatives[i].toLowerCase()) {
+                        return i;
+                    }
+                } else {
+                    if (matchedText === alternatives[i]) {
+                        return i;
+                    }
                 }
             }
         }
@@ -313,7 +385,8 @@ class RegexHighlighter {
 
     findMatches() {
         this.matches = [];
-        const regex = new RegExp(this.searchPattern, 'gi');
+        const flags = this.getRegexFlagsString();
+        const regex = new RegExp(this.searchPattern, flags);
 
         // Extract alternatives for type-based coloring
         const alternatives = this.extractAlternatives(this.searchPattern);
