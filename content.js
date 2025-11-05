@@ -915,6 +915,21 @@ class RegexHighlighter {
         }
     }
 
+    deletePattern(index) {
+        if (index >= 0 && index < this.savedPatterns.length) {
+            // Remove the pattern at the specified index
+            this.savedPatterns.splice(index, 1);
+            // Save to localStorage
+            try {
+                localStorage.setItem('regex-highlight-patterns', JSON.stringify(this.savedPatterns));
+            } catch (e) {
+                console.warn('Could not save patterns to localStorage', e);
+            }
+            // Re-render the pattern list
+            this.renderSavedPatterns();
+        }
+    }
+
     renderSavedPatterns() {
         const historyContainer = document.getElementById('regex-pattern-history');
         if (!historyContainer) return;
@@ -933,19 +948,38 @@ class RegexHighlighter {
                 .replace(/'/g, '&#039;');
             const escapedPattern = escapeHtml(pattern);
             const escapedDataPattern = escapeHtml(pattern);
-            return `<button class="regex-pattern-chip" data-pattern="${escapedDataPattern}" title="Click to use: ${pattern}">${escapedPattern}</button>`;
+            return `<button class="regex-pattern-chip" data-pattern="${escapedDataPattern}" title="Click to use: ${pattern}">
+                <span class="regex-pattern-text">${escapedPattern}</span>
+                <span class="regex-pattern-delete" data-delete-index="${index}" title="Delete pattern">×</span>
+            </button>`;
         }).join('');
 
         // Add click handlers
         historyContainer.querySelectorAll('.regex-pattern-chip').forEach(btn => {
             btn.addEventListener('click', (e) => {
+                // Don't trigger if clicking the delete button
+                if (e.target.classList.contains('regex-pattern-delete')) {
+                    return;
+                }
+
                 // Get the original pattern from savedPatterns using the index
-                const chipIndex = Array.from(historyContainer.children).indexOf(e.target);
+                const chipIndex = Array.from(historyContainer.children).indexOf(btn);
                 const pattern = this.savedPatterns[chipIndex];
                 const searchInput = document.getElementById('regex-search-input');
                 if (searchInput && pattern) {
                     searchInput.value = pattern;
                     this.search(pattern);
+                }
+            });
+        });
+
+        // Add delete button handlers
+        historyContainer.querySelectorAll('.regex-pattern-delete').forEach(deleteBtn => {
+            deleteBtn.addEventListener('click', (e) => {
+                e.stopPropagation(); // Prevent triggering the chip click
+                const index = parseInt(deleteBtn.dataset.deleteIndex);
+                if (!isNaN(index) && index >= 0 && index < this.savedPatterns.length) {
+                    this.deletePattern(index);
                 }
             });
         });

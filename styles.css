@@ -202,7 +202,7 @@
 }
 
 .regex-pattern-chip {
-    padding: 3px 8px;
+    padding: 3px 6px 3px 8px;
     border: 1px solid #ccc;
     border-radius: 12px;
     background-color: #f0f0f0;
@@ -214,11 +214,43 @@
     overflow: hidden;
     text-overflow: ellipsis;
     transition: background-color 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 4px;
 }
 
 .regex-pattern-chip:hover {
     background-color: #e0e0e0;
     border-color: #808080;
+}
+
+.regex-pattern-text {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+.regex-pattern-delete {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background-color: transparent;
+    color: #666;
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: bold;
+}
+
+.regex-pattern-delete:hover {
+    background-color: #ff4444;
+    color: #fff;
 }
 
 .regex-navigation {
