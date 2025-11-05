@@ -107,7 +107,10 @@ class RegexHighlighter {
         <div id="regex-pattern-history" class="regex-pattern-history"></div>
         <div class="regex-navigation">
           <button id="regex-prev-btn" disabled>◀ Prev</button>
-          <span id="regex-match-counter">0 / 0</span>
+          <div class="regex-match-counter-container">
+            <span id="regex-match-counter">0 / 0</span>
+            <span id="regex-match-type-counts" class="regex-match-type-counts"></span>
+          </div>
           <button id="regex-next-btn" disabled>Next ▶</button>
         </div>
       </div>
@@ -136,6 +139,11 @@ class RegexHighlighter {
         const prevBtn = document.getElementById('regex-prev-btn');
         const nextBtn = document.getElementById('regex-next-btn');
         const scrollOnSearchCheckbox = document.getElementById('regex-scroll-on-search');
+
+        // Pattern validation on input
+        searchInput.addEventListener('input', (e) => {
+            this.validatePattern(e.target.value);
+        });
         const flagGlobalCheckbox = document.getElementById('regex-flag-global');
         const flagIgnoreCaseCheckbox = document.getElementById('regex-flag-ignorecase');
         const flagMultilineCheckbox = document.getElementById('regex-flag-multiline');
@@ -200,6 +208,12 @@ class RegexHighlighter {
         clearBtn.addEventListener('click', () => {
             this.clear();
             searchInput.value = '';
+            // Clear validation errors
+            searchInput.classList.remove('regex-input-invalid');
+            const errorMessage = document.getElementById('regex-pattern-error');
+            if (errorMessage) {
+                errorMessage.remove();
+            }
             this.updateButtonStates();
         });
 
@@ -258,10 +272,64 @@ class RegexHighlighter {
         });
     }
 
-    search(pattern) {
+    validatePattern(pattern) {
+        const searchInput = document.getElementById('regex-search-input');
+        const errorMessage = document.getElementById('regex-pattern-error');
+
+        if (!searchInput) return;
+
+        // Remove existing error message if any
+        if (errorMessage) {
+            errorMessage.remove();
+        }
+
+        // Clear validation styling if pattern is empty
+        if (!pattern.trim()) {
+            searchInput.classList.remove('regex-input-invalid');
+            return;
+        }
+
         try {
             // Test if pattern is valid regex
-            new RegExp(pattern);
+            const flags = this.getRegexFlagsString();
+            new RegExp(pattern, flags);
+            // Valid pattern - remove invalid styling
+            searchInput.classList.remove('regex-input-invalid');
+        } catch (error) {
+            // Invalid pattern - add visual feedback
+            searchInput.classList.add('regex-input-invalid');
+
+            // Create error message element if it doesn't exist
+            if (!errorMessage) {
+                const errorDiv = document.createElement('div');
+                errorDiv.id = 'regex-pattern-error';
+                errorDiv.className = 'regex-pattern-error';
+                searchInput.parentNode.insertBefore(errorDiv, searchInput.nextSibling);
+            }
+
+            // Update error message
+            const errorDiv = document.getElementById('regex-pattern-error');
+            if (errorDiv) {
+                errorDiv.textContent = `Invalid regex: ${error.message}`;
+            }
+        }
+    }
+
+    search(pattern) {
+        // Clear any validation errors first
+        const searchInput = document.getElementById('regex-search-input');
+        if (searchInput) {
+            searchInput.classList.remove('regex-input-invalid');
+        }
+        const errorMessage = document.getElementById('regex-pattern-error');
+        if (errorMessage) {
+            errorMessage.remove();
+        }
+
+        try {
+            // Test if pattern is valid regex
+            const flags = this.getRegexFlagsString();
+            new RegExp(pattern, flags);
             this.searchPattern = pattern;
             this.savePattern(pattern);
             this.clearHighlights();
@@ -281,7 +349,8 @@ class RegexHighlighter {
             // Update button states
             this.updateButtonStates();
         } catch (error) {
-            alert(`Invalid regex pattern: ${error.message}`);
+            // Show validation error
+            this.validatePattern(pattern);
         }
     }
 
@@ -585,11 +654,41 @@ class RegexHighlighter {
         const prevBtn = document.getElementById('regex-prev-btn');
         const nextBtn = document.getElementById('regex-next-btn');
         const counter = document.getElementById('regex-match-counter');
+        const typeCountsElement = document.getElementById('regex-match-type-counts');
 
         if (prevBtn && nextBtn && counter) {
             const total = this.matches.length;
             const current = total > 0 ? this.currentIndex + 1 : 0;
+
+            // Set main counter
             counter.textContent = `${current} / ${total}`;
+            counter.title = `Match ${current} of ${total}`;
+
+            // Show per-type details below main counter if multiple types exist
+            if (typeCountsElement) {
+                if (this.matchTypes.length > 1 && total > 0) {
+                    // Count matches by type
+                    const typeCounts = {};
+                    this.matches.forEach(match => {
+                        if (match.matchType !== null) {
+                            const typeName = this.matchTypes[match.matchType];
+                            typeCounts[typeName] = (typeCounts[typeName] || 0) + 1;
+                        }
+                    });
+
+                    // Build type count string
+                    const typeCountStrings = Object.entries(typeCounts)
+                        .map(([name, count]) => `${name}: ${count}`)
+                        .join(', ');
+
+                    typeCountsElement.textContent = `(${typeCountStrings})`;
+                    typeCountsElement.style.display = 'block';
+                } else {
+                    typeCountsElement.textContent = '';
+                    typeCountsElement.style.display = 'none';
+                }
+            }
+
             prevBtn.disabled = total === 0;
             nextBtn.disabled = total === 0;
         }
@@ -1075,7 +1174,11 @@ class RegexHighlighter {
             }
 
             marker.style.top = markerTop + 'px';
-            marker.title = `Match ${index + 1} of ${this.matches.length}`;
+
+            // Get match context for preview
+            const matchText = match.span ? match.span.textContent : '';
+            const matchContext = this.getMatchContext(match, 50); // 50 chars before/after
+            marker.title = `Match ${index + 1} of ${this.matches.length}\n${matchContext}`;
 
             // Click handler to jump to match
             marker.addEventListener('click', () => {
@@ -1091,6 +1194,72 @@ class RegexHighlighter {
         if (this.scrollbarMarkerContainer) {
             this.scrollbarMarkerContainer.innerHTML = '';
         }
+    }
+
+    getMatchContext(match, contextLength = 50) {
+        if (!match.span) return '';
+
+        const matchText = match.span.textContent || '';
+        if (!matchText) return '';
+
+        // Get the parent element that contains the full text
+        let parentElement = match.span.parentElement;
+        if (!parentElement) return matchText;
+
+        // Get all text content from parent, but we need to find the position
+        // Since the span is already highlighted, we need to get text from siblings
+        let fullText = '';
+        let matchPosition = -1;
+
+        // Walk through parent's children to reconstruct text and find match position
+        let currentPos = 0;
+        for (let child of parentElement.childNodes) {
+            if (child === match.span) {
+                matchPosition = currentPos;
+                fullText += matchText;
+                currentPos += matchText.length;
+            } else if (child.nodeType === Node.TEXT_NODE) {
+                fullText += child.textContent;
+                currentPos += child.textContent.length;
+            } else if (child.nodeType === Node.ELEMENT_NODE) {
+                const text = child.textContent || '';
+                fullText += text;
+                currentPos += text.length;
+            }
+        }
+
+        // If we couldn't find the position, try simpler approach
+        if (matchPosition === -1) {
+            fullText = parentElement.textContent || '';
+            matchPosition = fullText.indexOf(matchText);
+        }
+
+        if (matchPosition === -1) {
+            return matchText;
+        }
+
+        const start = Math.max(0, matchPosition - contextLength);
+        const end = Math.min(fullText.length, matchPosition + matchText.length + contextLength);
+
+        let context = fullText.substring(start, end);
+
+        // Add ellipsis if truncated
+        if (start > 0) context = '...' + context;
+        if (end < fullText.length) context = context + '...';
+
+        // Highlight the match in the context (adjust position for ellipsis)
+        const matchStartInContext = start > 0 ?
+            (matchPosition - start + 3) : // Account for '...' prefix
+            (matchPosition - start);
+        const matchEndInContext = matchStartInContext + matchText.length;
+
+        if (matchStartInContext >= 0 && matchEndInContext <= context.length) {
+            context = context.substring(0, matchStartInContext) +
+                '[' + matchText + ']' +
+                context.substring(matchEndInContext);
+        }
+
+        return context;
     }
 
     loadSavedPatterns() {
