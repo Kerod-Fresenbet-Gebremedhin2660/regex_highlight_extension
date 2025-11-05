@@ -193,10 +193,18 @@ class RegexHighlighter {
             }
         });
 
+        searchInput.addEventListener('input', () => {
+            this.updateButtonStates();
+        });
+
         clearBtn.addEventListener('click', () => {
             this.clear();
             searchInput.value = '';
+            this.updateButtonStates();
         });
+
+        // Initialize button states
+        this.updateButtonStates();
 
         prevBtn.addEventListener('click', () => this.previous());
         nextBtn.addEventListener('click', () => this.next());
@@ -270,6 +278,8 @@ class RegexHighlighter {
             this.renderSavedPatterns();
             // Update scrollbar markers
             this.updateScrollbarMarkers();
+            // Update button states
+            this.updateButtonStates();
         } catch (error) {
             alert(`Invalid regex pattern: ${error.message}`);
         }
@@ -517,6 +527,7 @@ class RegexHighlighter {
         this.clearHighlights();
         this.updateNavigation();
         this.clearScrollbarMarkers();
+        this.updateButtonStates();
     }
 
     next() {
@@ -581,6 +592,22 @@ class RegexHighlighter {
             counter.textContent = `${current} / ${total}`;
             prevBtn.disabled = total === 0;
             nextBtn.disabled = total === 0;
+        }
+    }
+
+    updateButtonStates() {
+        const searchInput = document.getElementById('regex-search-input');
+        const searchBtn = document.getElementById('regex-search-btn');
+        const clearBtn = document.getElementById('regex-clear-btn');
+
+        if (searchInput && searchBtn) {
+            // Disable search button if input is empty
+            searchBtn.disabled = !searchInput.value.trim();
+        }
+
+        if (clearBtn) {
+            // Disable clear button if there are no matches to clear
+            clearBtn.disabled = this.matches.length === 0;
         }
     }
 
@@ -1164,6 +1191,7 @@ class RegexHighlighter {
                 if (searchInput && pattern) {
                     searchInput.value = pattern;
                     this.search(pattern);
+                    this.updateButtonStates();
                 }
             });
         });

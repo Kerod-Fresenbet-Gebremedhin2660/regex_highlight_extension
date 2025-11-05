@@ -21,6 +21,10 @@
     overflow: hidden;
 }
 
+#regex-highlight-ui:not(.minimized) {
+    width: 220px;
+}
+
 .regex-drag-handle {
     position: absolute;
     top: 0;
@@ -153,8 +157,15 @@
     color: #000000 !important;
 }
 
-#regex-search-btn:hover {
+#regex-search-btn:hover:not(:disabled) {
     background-color: #a0a0a0 !important;
+}
+
+#regex-search-btn:disabled {
+    background-color: #bdc3c7 !important;
+    color: #000000 !important;
+    cursor: not-allowed !important;
+    opacity: 0.6 !important;
 }
 
 #regex-clear-btn {
@@ -162,8 +173,15 @@
     color: #000000 !important;
 }
 
-#regex-clear-btn:hover {
+#regex-clear-btn:hover:not(:disabled) {
     background-color: #a0a0a0 !important;
+}
+
+#regex-clear-btn:disabled {
+    background-color: #bdc3c7 !important;
+    color: #000000 !important;
+    cursor: not-allowed !important;
+    opacity: 0.6 !important;
 }
 
 .regex-settings {
@@ -226,13 +244,15 @@
 }
 
 .regex-pattern-history {
+    width: 200px;
+    color: red;
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 4px;
     margin-top: 6px;
     max-height: 60px;
-    overflow-y: auto;
-    overflow-x: hidden;
+    overflow-y: hidden;
+    overflow-x: scroll;
 }
 
 .regex-pattern-chip {
