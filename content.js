@@ -965,7 +965,14 @@ class RegexHighlighter {
 
             // Create marker element
             const marker = document.createElement('div');
-            marker.className = 'regex-scrollbar-marker';
+            let markerClass = 'regex-scrollbar-marker';
+
+            // Add type-specific class if we have multiple types
+            if (match.matchType !== null && this.matchTypes.length > 1) {
+                markerClass += ` regex-scrollbar-marker-type-${match.matchType}`;
+            }
+
+            marker.className = markerClass;
             marker.dataset.matchIndex = index;
 
             if (index === this.currentIndex) {

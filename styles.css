@@ -300,50 +300,50 @@
 
 /* Type-specific base colors (when not focused) - using colors appropriate for reading */
 .regex-highlight-type-0 {
-    background-color: #fff9c4 !important;
-    /* Light yellow */
+    background-color: #fdd835 !important;
+    /* Yellow */
     color: #000 !important;
 }
 
 .regex-highlight-type-1 {
-    background-color: #c8e6c9 !important;
-    /* Light green */
+    background-color: #81c784 !important;
+    /* Green */
     color: #000 !important;
 }
 
 .regex-highlight-type-2 {
-    background-color: #bbdefb !important;
-    /* Light blue */
+    background-color: #64b5f6 !important;
+    /* Blue */
     color: #000 !important;
 }
 
 .regex-highlight-type-3 {
-    background-color: #f8bbd0 !important;
-    /* Light pink */
+    background-color: #f48fb1 !important;
+    /* Pink */
     color: #000 !important;
 }
 
 .regex-highlight-type-4 {
-    background-color: #d1c4e9 !important;
-    /* Light purple */
+    background-color: #ba68c8 !important;
+    /* Purple */
     color: #000 !important;
 }
 
 .regex-highlight-type-5 {
-    background-color: #ffe0b2 !important;
-    /* Light orange */
+    background-color: #ffb74d !important;
+    /* Orange */
     color: #000 !important;
 }
 
 .regex-highlight-type-6 {
-    background-color: #b2dfdb !important;
-    /* Light teal */
+    background-color: #4db6ac !important;
+    /* Teal */
     color: #000 !important;
 }
 
 .regex-highlight-type-7 {
-    background-color: #f5deb3 !important;
-    /* Light beige/wheat */
+    background-color: #a1887f !important;
+    /* Beige/brown */
     color: #000 !important;
 }
 
@@ -396,11 +396,84 @@
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
+/* Type-specific marker colors - using darker colors for visibility */
+.regex-scrollbar-marker-type-0 {
+    background-color: #f9a825 !important;
+    /* Darker yellow */
+}
+
+.regex-scrollbar-marker-type-1 {
+    background-color: #66bb6a !important;
+    /* Darker green */
+}
+
+.regex-scrollbar-marker-type-2 {
+    background-color: #42a5f5 !important;
+    /* Darker blue */
+}
+
+.regex-scrollbar-marker-type-3 {
+    background-color: #ec407a !important;
+    /* Darker pink */
+}
+
+.regex-scrollbar-marker-type-4 {
+    background-color: #ab47bc !important;
+    /* Darker purple */
+}
+
+.regex-scrollbar-marker-type-5 {
+    background-color: #ffa726 !important;
+    /* Darker orange */
+}
+
+.regex-scrollbar-marker-type-6 {
+    background-color: #26a69a !important;
+    /* Darker teal */
+}
+
+.regex-scrollbar-marker-type-7 {
+    background-color: #8d6e63 !important;
+    /* Darker beige/brown */
+}
+
 .regex-scrollbar-marker:hover {
     width: 6px;
     height: 7px;
-    background-color: #fbc02d;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* Hover states for type-specific markers */
+.regex-scrollbar-marker-type-0:hover {
+    background-color: #f57f17 !important;
+}
+
+.regex-scrollbar-marker-type-1:hover {
+    background-color: #4caf50 !important;
+}
+
+.regex-scrollbar-marker-type-2:hover {
+    background-color: #2196f3 !important;
+}
+
+.regex-scrollbar-marker-type-3:hover {
+    background-color: #e91e63 !important;
+}
+
+.regex-scrollbar-marker-type-4:hover {
+    background-color: #9c27b0 !important;
+}
+
+.regex-scrollbar-marker-type-5:hover {
+    background-color: #ff9800 !important;
+}
+
+.regex-scrollbar-marker-type-6:hover {
+    background-color: #009688 !important;
+}
+
+.regex-scrollbar-marker-type-7:hover {
+    background-color: #6d4c41 !important;
 }
 
 .regex-scrollbar-marker.active {
@@ -409,6 +482,19 @@
     background-color: #ff9800;
     box-shadow: 0 0 4px rgba(255, 152, 0, 0.6), 0 2px 4px rgba(0, 0, 0, 0.3);
     z-index: 1;
+}
+
+/* Active state overrides type colors for markers */
+.regex-scrollbar-marker.active.regex-scrollbar-marker-type-0,
+.regex-scrollbar-marker.active.regex-scrollbar-marker-type-1,
+.regex-scrollbar-marker.active.regex-scrollbar-marker-type-2,
+.regex-scrollbar-marker.active.regex-scrollbar-marker-type-3,
+.regex-scrollbar-marker.active.regex-scrollbar-marker-type-4,
+.regex-scrollbar-marker.active.regex-scrollbar-marker-type-5,
+.regex-scrollbar-marker.active.regex-scrollbar-marker-type-6,
+.regex-scrollbar-marker.active.regex-scrollbar-marker-type-7 {
+    background-color: #ff9800 !important;
+    /* Orange for active, regardless of type */
 }
 
 /* Hide markers when widget is minimized if desired */
