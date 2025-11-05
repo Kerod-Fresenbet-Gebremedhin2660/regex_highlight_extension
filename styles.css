@@ -354,3 +354,8 @@
 #regex-highlight-ui.minimized~.regex-scrollbar-markers {
     display: block;
 }
+
+.regex-search-buttons-container {
+    display: flex;
+    justify-content: space-between;
+}

@@ -59,8 +59,10 @@ class RegexHighlighter {
       </div>
       <div class="regex-search-container">
         <input type="text" id="regex-search-input" placeholder="Enter regex pattern (e.g., (dog|cat))" />
-        <button id="regex-search-btn">Search</button>
-        <button id="regex-clear-btn">Clear</button>
+        <div class="regex-search-buttons-container">
+            <button id="regex-search-btn">Search</button>
+            <button id="regex-clear-btn">Clear</button>
+        </div>
         <div class="regex-settings">
           <label class="regex-setting-toggle">
             <input type="checkbox" id="regex-scroll-on-search" ${this.scrollOnSearch ? 'checked' : ''}>
