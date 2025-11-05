@@ -131,13 +131,23 @@ class RegexHighlighter {
                     e.preventDefault();
                     if (this.isMinimized) {
                         // If minimized: unminimize and focus search
+                        // Check for selected text first
+                        const selectedText = window.getSelection().toString().trim();
+
                         this.toggleMinimize();
                         // Small delay to ensure widget is expanded before focusing
                         setTimeout(() => {
                             const input = document.getElementById('regex-search-input');
                             if (input) {
-                                input.focus();
-                                input.select(); // Select existing text for easy replacement
+                                // If there's selected text, use it for search
+                                if (selectedText) {
+                                    input.value = selectedText;
+                                    // Trigger search with the selected text
+                                    this.search(selectedText);
+                                } else {
+                                    input.focus();
+                                    input.select(); // Select existing text for easy replacement
+                                }
                             }
                         }, 50);
                     } else {
