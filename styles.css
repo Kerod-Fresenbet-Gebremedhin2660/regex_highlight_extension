@@ -164,6 +164,33 @@
     background-color: #a0a0a0;
 }
 
+.regex-settings {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #e0e0e0;
+}
+
+.regex-setting-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: #555;
+    cursor: pointer;
+    user-select: none;
+}
+
+.regex-setting-toggle input[type="checkbox"] {
+    cursor: pointer;
+    margin: 0;
+    width: 14px;
+    height: 14px;
+}
+
+.regex-setting-toggle span {
+    flex: 1;
+}
+
 .regex-pattern-history {
     display: flex;
     flex-wrap: wrap;

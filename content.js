@@ -19,6 +19,7 @@ class RegexHighlighter {
         this.dragStartLeft = 0;
         this.dragStartTop = 0;
         this.scrollbarMarkerContainer = null;
+        this.scrollOnSearch = this.loadSetting('scrollOnSearch', false);
         this.init();
     }
 
@@ -60,6 +61,12 @@ class RegexHighlighter {
         <input type="text" id="regex-search-input" placeholder="Enter regex pattern (e.g., (dog|cat))" />
         <button id="regex-search-btn">Search</button>
         <button id="regex-clear-btn">Clear</button>
+        <div class="regex-settings">
+          <label class="regex-setting-toggle">
+            <input type="checkbox" id="regex-scroll-on-search" ${this.scrollOnSearch ? 'checked' : ''}>
+            <span>Scroll to first match on search</span>
+          </label>
+        </div>
         <div id="regex-pattern-history" class="regex-pattern-history"></div>
         <div class="regex-navigation">
           <button id="regex-prev-btn" disabled>◀ Previous</button>
@@ -91,6 +98,15 @@ class RegexHighlighter {
         const clearBtn = document.getElementById('regex-clear-btn');
         const prevBtn = document.getElementById('regex-prev-btn');
         const nextBtn = document.getElementById('regex-next-btn');
+        const scrollOnSearchCheckbox = document.getElementById('regex-scroll-on-search');
+
+        // Setting toggle handler
+        if (scrollOnSearchCheckbox) {
+            scrollOnSearchCheckbox.addEventListener('change', (e) => {
+                this.scrollOnSearch = e.target.checked;
+                this.saveSetting('scrollOnSearch', this.scrollOnSearch);
+            });
+        }
 
         minimizeBtn.addEventListener('click', () => this.toggleMinimize());
 
@@ -178,7 +194,7 @@ class RegexHighlighter {
             this.highlightMatches();
             this.currentIndex = this.matches.length > 0 ? 0 : -1;
             this.updateNavigation();
-            if (this.currentIndex >= 0) {
+            if (this.currentIndex >= 0 && this.scrollOnSearch) {
                 this.scrollToMatch(this.currentIndex);
             }
             // Setup intersection observer for scroll tracking
@@ -861,6 +877,23 @@ class RegexHighlighter {
             return saved ? JSON.parse(saved) : [];
         } catch (e) {
             return [];
+        }
+    }
+
+    loadSetting(key, defaultValue) {
+        try {
+            const saved = localStorage.getItem(`regex-highlight-setting-${key}`);
+            return saved !== null ? JSON.parse(saved) : defaultValue;
+        } catch (e) {
+            return defaultValue;
+        }
+    }
+
+    saveSetting(key, value) {
+        try {
+            localStorage.setItem(`regex-highlight-setting-${key}`, JSON.stringify(value));
+        } catch (e) {
+            console.warn('Could not save setting to localStorage', e);
         }
     }
 
