@@ -636,38 +636,28 @@ class RegexHighlighter {
         const handleMove = (clientX, clientY) => {
             if (!this.isDragging) return;
 
-            const deltaX = clientX - this.dragStartX;
+            // Only use vertical movement (deltaY)
             const deltaY = clientY - this.dragStartY;
 
             // Get current dimensions (before transform)
-            const width = overlay.offsetWidth || overlay.getBoundingClientRect().width;
             const height = overlay.offsetHeight || overlay.getBoundingClientRect().height;
 
-            // Calculate desired position
-            let newLeft = this.dragStartLeft + deltaX;
+            // Calculate desired vertical position
             let newTop = this.dragStartTop + deltaY;
 
-            // Keep widget within viewport bounds
-            const maxLeft = window.innerWidth - width;
+            // Keep widget within viewport bounds vertically
             const maxTop = window.innerHeight - height;
 
-            // Clamp to bounds and adjust delta if needed
-            if (newLeft < 0) {
-                newLeft = 0;
-            } else if (newLeft > maxLeft) {
-                newLeft = maxLeft;
-            }
-
+            // Clamp to bounds
             if (newTop < 0) {
                 newTop = 0;
             } else if (newTop > maxTop) {
                 newTop = maxTop;
             }
 
-            // Use transform for better performance during drag
-            const finalDeltaX = newLeft - this.dragStartLeft;
+            // Only apply vertical transform - horizontal stays fixed (right-anchored)
             const finalDeltaY = newTop - this.dragStartTop;
-            overlay.style.transform = `translate(${finalDeltaX}px, ${finalDeltaY}px)`;
+            overlay.style.transform = `translateY(${finalDeltaY}px)`;
         };
 
         const handleMoveRAF = (clientX, clientY) => {
@@ -684,18 +674,16 @@ class RegexHighlighter {
             if (e.target.id === 'regex-minimize-btn' || e.target.closest('#regex-minimize-btn')) return;
 
             this.isDragging = true;
-            this.dragStartX = e.clientX;
             this.dragStartY = e.clientY;
 
             const rect = overlay.getBoundingClientRect();
-            this.dragStartLeft = rect.left;
             this.dragStartTop = rect.top;
 
-            // Store initial position if not already set
-            if (!overlay.dataset.initialLeft) {
-                overlay.dataset.initialLeft = this.dragStartLeft;
-                overlay.dataset.initialTop = this.dragStartTop;
-            }
+            // Store the right position to keep it fixed
+            const computedStyle = window.getComputedStyle(overlay);
+            this.dragStartRight = computedStyle.right !== 'auto' ?
+                parseFloat(computedStyle.right) :
+                (window.innerWidth - rect.right);
 
             overlay.style.cursor = 'grabbing';
             dragHandle.style.cursor = 'grabbing';
@@ -717,17 +705,16 @@ class RegexHighlighter {
                     rafId = null;
                 }
 
-                // Apply final position
+                // Apply final position - only vertical, keep right-anchored
                 const rect = overlay.getBoundingClientRect();
-                const finalLeft = rect.left;
                 const finalTop = rect.top;
 
                 // Reset transform and set final position
                 overlay.style.transform = '';
                 overlay.style.transition = ''; // Re-enable transition
-                overlay.style.left = finalLeft + 'px';
+                overlay.style.left = 'auto';
                 overlay.style.top = finalTop + 'px';
-                overlay.style.right = 'auto';
+                overlay.style.right = this.dragStartRight + 'px';
                 overlay.style.bottom = 'auto';
 
                 this.isDragging = false;
@@ -743,17 +730,16 @@ class RegexHighlighter {
 
             const touch = e.touches[0];
             this.isDragging = true;
-            this.dragStartX = touch.clientX;
             this.dragStartY = touch.clientY;
 
             const rect = overlay.getBoundingClientRect();
-            this.dragStartLeft = rect.left;
             this.dragStartTop = rect.top;
 
-            if (!overlay.dataset.initialLeft) {
-                overlay.dataset.initialLeft = this.dragStartLeft;
-                overlay.dataset.initialTop = this.dragStartTop;
-            }
+            // Store the right position to keep it fixed
+            const computedStyle = window.getComputedStyle(overlay);
+            this.dragStartRight = computedStyle.right !== 'auto' ?
+                parseFloat(computedStyle.right) :
+                (window.innerWidth - rect.right);
 
             overlay.style.transition = 'none';
 
@@ -776,15 +762,15 @@ class RegexHighlighter {
                     rafId = null;
                 }
 
+                // Apply final position - only vertical, keep right-anchored
                 const rect = overlay.getBoundingClientRect();
-                const finalLeft = rect.left;
                 const finalTop = rect.top;
 
                 overlay.style.transform = '';
                 overlay.style.transition = '';
-                overlay.style.left = finalLeft + 'px';
+                overlay.style.left = 'auto';
                 overlay.style.top = finalTop + 'px';
-                overlay.style.right = 'auto';
+                overlay.style.right = this.dragStartRight + 'px';
                 overlay.style.bottom = 'auto';
 
                 this.isDragging = false;
@@ -792,26 +778,21 @@ class RegexHighlighter {
             }
         });
 
-        // Handle window resize to keep widget in bounds
+        // Handle window resize to keep widget in bounds (vertical only)
         let resizeTimeout;
         window.addEventListener('resize', () => {
             clearTimeout(resizeTimeout);
             resizeTimeout = setTimeout(() => {
                 if (!this.isDragging) {
                     const rect = overlay.getBoundingClientRect();
-                    const width = rect.width;
                     const height = rect.height;
-                    const currentLeft = rect.left;
                     const currentTop = rect.top;
 
-                    const maxLeft = window.innerWidth - width;
                     const maxTop = window.innerHeight - height;
 
-                    const newLeft = Math.max(0, Math.min(currentLeft, maxLeft));
                     const newTop = Math.max(0, Math.min(currentTop, maxTop));
 
-                    if (newLeft !== currentLeft || newTop !== currentTop) {
-                        overlay.style.left = newLeft + 'px';
+                    if (newTop !== currentTop) {
                         overlay.style.top = newTop + 'px';
                         this.savePosition(overlay);
                     }
@@ -824,17 +805,21 @@ class RegexHighlighter {
 
     savePosition(overlay) {
         const rect = overlay.getBoundingClientRect();
-        // Ensure position is within bounds before saving
-        const width = rect.width;
-        const height = rect.height;
-        const maxLeft = window.innerWidth - width;
-        const maxTop = window.innerHeight - height;
+        const computedStyle = window.getComputedStyle(overlay);
 
-        const clampedLeft = Math.max(0, Math.min(rect.left, maxLeft));
-        const clampedTop = Math.max(0, Math.min(rect.top, maxTop));
+        // Save right position and top position (vertical only)
+        const right = computedStyle.right !== 'auto' ?
+            parseFloat(computedStyle.right) :
+            (window.innerWidth - rect.right);
+        const top = rect.top;
+
+        // Ensure position is within bounds before saving
+        const height = rect.height;
+        const maxTop = window.innerHeight - height;
+        const clampedTop = Math.max(0, Math.min(top, maxTop));
 
         const position = {
-            left: clampedLeft,
+            right: right,
             top: clampedTop
         };
         try {
@@ -851,22 +836,32 @@ class RegexHighlighter {
                 const position = JSON.parse(saved);
                 // Ensure loaded position is within viewport
                 const rect = overlay.getBoundingClientRect();
-                const width = rect.width || 220; // fallback to min-width
                 const height = rect.height || 100; // fallback estimate
 
-                const maxLeft = window.innerWidth - width;
                 const maxTop = window.innerHeight - height;
 
-                const clampedLeft = Math.max(0, Math.min(position.left, maxLeft));
-                const clampedTop = Math.max(0, Math.min(position.top, maxTop));
+                // Handle both old format (left) and new format (right)
+                const right = position.right !== undefined ? position.right :
+                    (position.left !== undefined ? (window.innerWidth - position.left - (rect.width || 220)) : 36);
+                const clampedTop = Math.max(0, Math.min(position.top !== undefined ? position.top : 10, maxTop));
 
-                overlay.style.left = clampedLeft + 'px';
+                overlay.style.left = 'auto';
                 overlay.style.top = clampedTop + 'px';
-                overlay.style.right = 'auto';
+                overlay.style.right = right + 'px';
+                overlay.style.bottom = 'auto';
+            } else {
+                // No saved position - ensure right-anchored default
+                overlay.style.left = 'auto';
+                overlay.style.right = '36px';
+                overlay.style.top = '10px';
                 overlay.style.bottom = 'auto';
             }
         } catch (e) {
-            // Ignore errors, use default position
+            // Ignore errors, use default position (right-anchored)
+            overlay.style.left = 'auto';
+            overlay.style.right = '36px';
+            overlay.style.top = '10px';
+            overlay.style.bottom = 'auto';
         }
     }
 

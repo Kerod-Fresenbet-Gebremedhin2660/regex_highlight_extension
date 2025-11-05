@@ -2,7 +2,8 @@
 #regex-highlight-ui {
     position: fixed;
     top: 10px;
-    right: 10px;
+    right: 36px;
+    /* Same separation from marker bar (marker bar at right: 20px, width: 12px) */
     z-index: 999999;
     background: #ffffff;
     border: 2px solid #4a90e2;
@@ -61,7 +62,8 @@
     padding: 4px;
     min-width: auto;
     left: auto !important;
-    right: 10px !important;
+    right: 36px !important;
+    /* Position to the left of scrollbar markers (which are at right: 20px, width: 12px) */
 }
 
 #regex-highlight-ui.minimized .regex-search-container {
