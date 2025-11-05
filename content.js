@@ -20,6 +20,7 @@ class RegexHighlighter {
         this.dragStartTop = 0;
         this.scrollbarMarkerContainer = null;
         this.scrollOnSearch = this.loadSetting('scrollOnSearch', false);
+        this.matchTypes = []; // Store alternative types for multi-type coloring
         this.init();
     }
 
@@ -71,7 +72,7 @@ class RegexHighlighter {
         </div>
         <div id="regex-pattern-history" class="regex-pattern-history"></div>
         <div class="regex-navigation">
-          <button id="regex-prev-btn" disabled>◀ Previous</button>
+          <button id="regex-prev-btn" disabled>◀ Prev</button>
           <span id="regex-match-counter">0 / 0</span>
           <button id="regex-next-btn" disabled>Next ▶</button>
         </div>
@@ -210,9 +211,114 @@ class RegexHighlighter {
         }
     }
 
+    extractAlternatives(pattern) {
+        // Simple extraction of alternatives from patterns like "cat|dog" or "(cat|dog)"
+        // This handles simple cases - for complex regex patterns, it may not work perfectly
+        const alternatives = [];
+
+        // Try to extract alternatives from the pattern
+        try {
+            // Check if pattern contains alternation
+            if (!pattern.includes('|')) {
+                return [];
+            }
+
+            // Simple case: pattern like "cat|dog" or "(cat|dog)"
+            let cleanPattern = pattern.trim();
+
+            // Remove outer parentheses if present (for grouping like "(cat|dog)")
+            // But be careful - only remove if the entire pattern is wrapped
+            if (cleanPattern.startsWith('(') && cleanPattern.endsWith(')')) {
+                // Check if it's balanced - simple check
+                let depth = 0;
+                let isWrapped = true;
+                for (let i = 0; i < cleanPattern.length; i++) {
+                    if (cleanPattern[i] === '(' && (i === 0 || cleanPattern[i - 1] !== '\\')) {
+                        depth++;
+                    } else if (cleanPattern[i] === ')' && (i === 0 || cleanPattern[i - 1] !== '\\')) {
+                        depth--;
+                        if (depth === 0 && i < cleanPattern.length - 1) {
+                            isWrapped = false;
+                            break;
+                        }
+                    }
+                }
+                if (isWrapped && depth === 0) {
+                    cleanPattern = cleanPattern.slice(1, -1);
+                }
+            }
+
+            // Split by | - handle escaped pipes
+            // Use a simple approach: split and check for escaped pipes
+            const parts = [];
+            let currentPart = '';
+            let escaped = false;
+
+            for (let i = 0; i < cleanPattern.length; i++) {
+                const char = cleanPattern[i];
+                if (escaped) {
+                    currentPart += char;
+                    escaped = false;
+                } else if (char === '\\') {
+                    currentPart += char;
+                    escaped = true;
+                } else if (char === '|') {
+                    parts.push(currentPart.trim());
+                    currentPart = '';
+                } else {
+                    currentPart += char;
+                }
+            }
+            parts.push(currentPart.trim()); // Add the last part
+
+            if (parts.length > 1) {
+                // Clean up each part and add if not empty
+                parts.forEach(part => {
+                    if (part) {
+                        alternatives.push(part);
+                    }
+                });
+            }
+        } catch (e) {
+            // If parsing fails, return empty array (will use single color)
+            console.warn('Could not extract alternatives from pattern:', e);
+        }
+
+        return alternatives.length > 1 ? alternatives : [];
+    }
+
+    determineMatchType(matchedText, alternatives) {
+        if (alternatives.length === 0) {
+            return null;
+        }
+
+        // Test which alternative matches the text (case-insensitive)
+        for (let i = 0; i < alternatives.length; i++) {
+            try {
+                const altRegex = new RegExp('^' + alternatives[i] + '$', 'i');
+                if (altRegex.test(matchedText)) {
+                    return i;
+                }
+            } catch (e) {
+                // If alternative is not a valid regex, try exact match
+                if (matchedText.toLowerCase() === alternatives[i].toLowerCase()) {
+                    return i;
+                }
+            }
+        }
+
+        // If no match found, return first type as default
+        return 0;
+    }
+
     findMatches() {
         this.matches = [];
         const regex = new RegExp(this.searchPattern, 'gi');
+
+        // Extract alternatives for type-based coloring
+        const alternatives = this.extractAlternatives(this.searchPattern);
+        this.matchTypes = alternatives.length > 0 ? alternatives : [];
+
         const walker = document.createTreeWalker(
             document.body,
             NodeFilter.SHOW_TEXT,
@@ -225,10 +331,14 @@ class RegexHighlighter {
             const text = node.textContent;
             let match;
             while ((match = regex.exec(text)) !== null) {
+                const matchedText = match[0];
+                const matchType = this.determineMatchType(matchedText, alternatives);
+
                 this.matches.push({
                     node: node,
                     index: match.index,
-                    length: match[0].length
+                    length: match[0].length,
+                    matchType: matchType // Store which type this match is
                 });
                 // Reset lastIndex to avoid infinite loop on zero-length matches
                 if (match[0].length === 0) {
@@ -270,7 +380,14 @@ class RegexHighlighter {
 
                 // Add highlighted span for the match
                 const span = document.createElement('span');
-                span.className = this.highlightClass;
+                let className = this.highlightClass;
+
+                // Add type-specific class if we have multiple types
+                if (match.matchType !== null && this.matchTypes.length > 1) {
+                    className += ` regex-highlight-type-${match.matchType}`;
+                }
+
+                span.className = className;
                 span.dataset.matchIndex = match.originalIndex.toString();
                 span.textContent = text.substring(match.index, match.index + match.length);
                 fragment.appendChild(span);
@@ -319,6 +436,7 @@ class RegexHighlighter {
 
         this.matches = [];
         this.currentIndex = -1;
+        this.matchTypes = [];
         this.clearScrollbarMarkers();
     }
 

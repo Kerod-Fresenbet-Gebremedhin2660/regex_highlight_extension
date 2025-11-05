@@ -298,12 +298,74 @@
     font-weight: 500;
 }
 
+/* Type-specific base colors (when not focused) - using colors appropriate for reading */
+.regex-highlight-type-0 {
+    background-color: #fff9c4 !important;
+    /* Light yellow */
+    color: #000 !important;
+}
+
+.regex-highlight-type-1 {
+    background-color: #c8e6c9 !important;
+    /* Light green */
+    color: #000 !important;
+}
+
+.regex-highlight-type-2 {
+    background-color: #bbdefb !important;
+    /* Light blue */
+    color: #000 !important;
+}
+
+.regex-highlight-type-3 {
+    background-color: #f8bbd0 !important;
+    /* Light pink */
+    color: #000 !important;
+}
+
+.regex-highlight-type-4 {
+    background-color: #d1c4e9 !important;
+    /* Light purple */
+    color: #000 !important;
+}
+
+.regex-highlight-type-5 {
+    background-color: #ffe0b2 !important;
+    /* Light orange */
+    color: #000 !important;
+}
+
+.regex-highlight-type-6 {
+    background-color: #b2dfdb !important;
+    /* Light teal */
+    color: #000 !important;
+}
+
+.regex-highlight-type-7 {
+    background-color: #f5deb3 !important;
+    /* Light beige/wheat */
+    color: #000 !important;
+}
+
 .regex-highlight-active {
     background-color: #ff9800 !important;
     color: #000 !important;
     box-shadow: 0 0 0 2px rgba(255, 152, 0, 0.5);
     outline: 2px solid #ff9800;
     outline-offset: 1px;
+}
+
+/* Active state overrides type colors */
+.regex-highlight-active.regex-highlight-type-0,
+.regex-highlight-active.regex-highlight-type-1,
+.regex-highlight-active.regex-highlight-type-2,
+.regex-highlight-active.regex-highlight-type-3,
+.regex-highlight-active.regex-highlight-type-4,
+.regex-highlight-active.regex-highlight-type-5,
+.regex-highlight-active.regex-highlight-type-6,
+.regex-highlight-active.regex-highlight-type-7 {
+    background-color: #ff9800 !important;
+    /* Orange for active, regardless of type */
 }
 
 /* Scrollbar markers */
