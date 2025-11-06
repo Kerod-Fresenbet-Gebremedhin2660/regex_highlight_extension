@@ -41,8 +41,15 @@ class RegexHighlighter {
     }
 
     init() {
-        // Create UI overlay
+        // Create UI overlay first
         this.createUI();
+
+        // Check for persisted search on same domain (after UI is created)
+        this.restoreSearchIfSameDomain();
+
+        // Listen for navigation events (for SPAs)
+        this.setupNavigationListener();
+
         // Listen for messages from popup
         chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             if (message.action === 'search') {
@@ -332,6 +339,10 @@ class RegexHighlighter {
             new RegExp(pattern, flags);
             this.searchPattern = pattern;
             this.savePattern(pattern);
+
+            // Save search state for domain persistence
+            this.saveSearchState(pattern);
+
             this.clearHighlights();
             this.findMatches();
             this.highlightMatches();
@@ -594,6 +605,9 @@ class RegexHighlighter {
 
     clear() {
         this.clearHighlights();
+        this.searchPattern = '';
+        // Clear persisted search state
+        this.clearSearchState();
         this.updateNavigation();
         this.clearScrollbarMarkers();
         this.updateButtonStates();
@@ -1375,6 +1389,271 @@ class RegexHighlighter {
                 }
             });
         });
+    }
+
+    getDomain() {
+        return window.location.hostname;
+    }
+
+    saveSearchState(pattern) {
+        if (!pattern) return;
+        const domain = this.getDomain();
+        const state = {
+            pattern: pattern,
+            domain: domain,
+            flags: this.regexFlags,
+            timestamp: Date.now()
+        };
+        chrome.storage.local.set({ 'regex-search-state': state }, () => {
+            if (chrome.runtime.lastError) {
+                console.warn('Could not save search state:', chrome.runtime.lastError);
+            }
+        });
+    }
+
+    clearSearchState() {
+        chrome.storage.local.remove('regex-search-state', () => {
+            if (chrome.runtime.lastError) {
+                console.warn('Could not clear search state:', chrome.runtime.lastError);
+            }
+        });
+    }
+
+    async restoreSearchIfSameDomain() {
+        try {
+            const result = await chrome.storage.local.get('regex-search-state');
+            if (result['regex-search-state']) {
+                const state = result['regex-search-state'];
+                const currentDomain = this.getDomain();
+
+                // Check if we're on the same domain
+                if (state.domain === currentDomain && state.pattern) {
+                    // Restore regex flags if they exist
+                    if (state.flags) {
+                        this.regexFlags = { ...this.regexFlags, ...state.flags };
+                    }
+
+                    // Wait for DOM to be ready, then restore search
+                    const restoreSearch = () => {
+                        // Small delay to ensure page content is loaded
+                        setTimeout(() => {
+                            this.searchPattern = state.pattern;
+                            // Update UI input if it exists
+                            const searchInput = document.getElementById('regex-search-input');
+                            if (searchInput) {
+                                searchInput.value = state.pattern;
+                            }
+                            // Update regex flags in UI if checkboxes exist
+                            if (state.flags) {
+                                const flagGlobalCheckbox = document.getElementById('regex-flag-global');
+                                const flagIgnoreCaseCheckbox = document.getElementById('regex-flag-ignorecase');
+                                const flagMultilineCheckbox = document.getElementById('regex-flag-multiline');
+                                const flagDotAllCheckbox = document.getElementById('regex-flag-dotall');
+                                if (flagGlobalCheckbox) flagGlobalCheckbox.checked = state.flags.global !== false;
+                                if (flagIgnoreCaseCheckbox) flagIgnoreCaseCheckbox.checked = state.flags.ignoreCase !== false;
+                                if (flagMultilineCheckbox) flagMultilineCheckbox.checked = state.flags.multiline === true;
+                                if (flagDotAllCheckbox) flagDotAllCheckbox.checked = state.flags.dotAll === true;
+                            }
+                            // Perform the search
+                            this.clearHighlights();
+                            this.findMatches();
+                            this.highlightMatches();
+                            this.currentIndex = this.matches.length > 0 ? 0 : -1;
+                            if (this.currentIndex >= 0 && this.scrollOnSearch) {
+                                this.scrollToMatch(this.currentIndex);
+                            }
+                            this.setupScrollTracking();
+                            this.updateScrollbarMarkers();
+                            this.updateNavigation();
+                            this.updateButtonStates();
+                        }, 200);
+                    };
+
+                    // Wait a bit for UI to be fully created
+                    setTimeout(() => {
+                        if (document.readyState === 'loading') {
+                            document.addEventListener('DOMContentLoaded', restoreSearch);
+                        } else {
+                            restoreSearch();
+                        }
+                    }, 100);
+                }
+            }
+        } catch (e) {
+            console.warn('Could not restore search state:', e);
+        }
+    }
+
+    setupNavigationListener() {
+        // Handle SPA navigation (pushState/replaceState)
+        let lastUrl = location.href;
+        let lastPath = location.pathname + location.search;
+        let navigationTimeout = null;
+
+        const checkNavigation = () => {
+            const currentUrl = location.href;
+            const currentPath = location.pathname + location.search;
+            const currentDomain = this.getDomain();
+
+            // Check if URL changed (path, query, or hash)
+            const urlChanged = currentUrl !== lastUrl;
+            const pathChanged = currentPath !== lastPath;
+
+            if (urlChanged) {
+                lastUrl = currentUrl;
+                lastPath = currentPath;
+
+                // Clear any pending navigation check
+                if (navigationTimeout) {
+                    clearTimeout(navigationTimeout);
+                }
+
+                chrome.storage.local.get('regex-search-state', (result) => {
+                    if (result['regex-search-state']) {
+                        const state = result['regex-search-state'];
+
+                        // If domain changed, clear search state
+                        if (state.domain !== currentDomain) {
+                            this.clearSearchState();
+                            this.searchPattern = '';
+                            this.clearHighlights();
+                            this.clearScrollbarMarkers();
+                            this.updateNavigation();
+                            this.updateButtonStates();
+                            return;
+                        }
+
+                        // If same domain and we have a saved pattern, restore/refresh search
+                        // Always refresh if path/query changed (new page in SPA) or pattern doesn't match
+                        if (state.domain === currentDomain && state.pattern) {
+                            // Wait for new content to load (SPAs load content asynchronously)
+                            navigationTimeout = setTimeout(() => {
+                                this.searchPattern = state.pattern;
+
+                                // Update UI input if it exists
+                                const searchInput = document.getElementById('regex-search-input');
+                                if (searchInput) {
+                                    searchInput.value = state.pattern;
+                                }
+
+                                // Update regex flags in UI if checkboxes exist
+                                if (state.flags) {
+                                    const flagGlobalCheckbox = document.getElementById('regex-flag-global');
+                                    const flagIgnoreCaseCheckbox = document.getElementById('regex-flag-ignorecase');
+                                    const flagMultilineCheckbox = document.getElementById('regex-flag-multiline');
+                                    const flagDotAllCheckbox = document.getElementById('regex-flag-dotall');
+                                    if (flagGlobalCheckbox) flagGlobalCheckbox.checked = state.flags.global !== false;
+                                    if (flagIgnoreCaseCheckbox) flagIgnoreCaseCheckbox.checked = state.flags.ignoreCase !== false;
+                                    if (flagMultilineCheckbox) flagMultilineCheckbox.checked = state.flags.multiline === true;
+                                    if (flagDotAllCheckbox) flagDotAllCheckbox.checked = state.flags.dotAll === true;
+
+                                    // Update internal flags
+                                    this.regexFlags = { ...this.regexFlags, ...state.flags };
+                                }
+
+                                // Clear existing highlights and re-search
+                                this.clearHighlights();
+                                this.findMatches();
+                                this.highlightMatches();
+                                this.currentIndex = this.matches.length > 0 ? 0 : -1;
+
+                                // Scroll to first match if enabled
+                                if (this.currentIndex >= 0 && this.scrollOnSearch) {
+                                    this.scrollToMatch(this.currentIndex);
+                                }
+
+                                // Update UI
+                                this.setupScrollTracking();
+                                this.updateScrollbarMarkers();
+                                this.updateNavigation();
+                                this.updateButtonStates();
+                            }, 500); // Wait 500ms for SPA content to load
+                        }
+                    }
+                });
+            }
+        };
+
+        // Monitor DOM changes for SPAs that don't use pushState
+        let domObserver = null;
+        const setupDOMObserver = () => {
+            if (domObserver) {
+                domObserver.disconnect();
+            }
+
+            // Watch for significant DOM changes that might indicate new page content
+            domObserver = new MutationObserver((mutations) => {
+                let shouldCheck = false;
+                for (const mutation of mutations) {
+                    // Check for added nodes (new content)
+                    if (mutation.addedNodes.length > 0) {
+                        // Only trigger if significant content was added
+                        for (const node of mutation.addedNodes) {
+                            if (node.nodeType === Node.ELEMENT_NODE) {
+                                // Check if it's a substantial element (not just a script/style)
+                                const tagName = node.tagName?.toLowerCase();
+                                if (tagName && !['script', 'style', 'link', 'meta', 'noscript'].includes(tagName)) {
+                                    shouldCheck = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if (shouldCheck) break;
+                }
+
+                if (shouldCheck) {
+                    // Debounce DOM change checks
+                    if (navigationTimeout) {
+                        clearTimeout(navigationTimeout);
+                    }
+                    navigationTimeout = setTimeout(checkNavigation, 300);
+                }
+            });
+
+            // Observe the document body for changes
+            if (document.body) {
+                domObserver.observe(document.body, {
+                    childList: true,
+                    subtree: true
+                });
+            }
+        };
+
+        // Setup DOM observer when body is available
+        if (document.body) {
+            setupDOMObserver();
+        } else {
+            const bodyObserver = new MutationObserver(() => {
+                if (document.body) {
+                    setupDOMObserver();
+                    bodyObserver.disconnect();
+                }
+            });
+            bodyObserver.observe(document.documentElement, { childList: true });
+        }
+
+        // Listen to popstate for browser back/forward
+        window.addEventListener('popstate', () => {
+            checkNavigation();
+        });
+
+        // Override pushState and replaceState for SPAs
+        const originalPushState = history.pushState;
+        const originalReplaceState = history.replaceState;
+
+        history.pushState = function () {
+            originalPushState.apply(history, arguments);
+            setTimeout(checkNavigation, 0);
+        };
+
+        history.replaceState = function () {
+            originalReplaceState.apply(history, arguments);
+            setTimeout(checkNavigation, 0);
+        };
+
+        // Also listen for hash changes
+        window.addEventListener('hashchange', checkNavigation);
     }
 }
 
