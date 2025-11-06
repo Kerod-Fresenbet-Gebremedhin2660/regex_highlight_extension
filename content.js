@@ -88,7 +88,10 @@ class RegexHighlighter {
         <button id="regex-minimize-btn" class="regex-minimize-btn">${this.isMinimized ? '+' : '−'}</button>
       </div>
       <div class="regex-search-container">
-        <input type="text" id="regex-search-input" placeholder="Enter regex pattern (e.g., (dog|cat))" />
+        <div class="regex-search-input-wrapper">
+          <input type="text" id="regex-search-input" placeholder="Enter regex pattern (e.g., (dog|cat))" />
+          <span id="regex-search-status" class="regex-search-status" title="Search status indicator"></span>
+        </div>
         <div class="regex-search-buttons-container">
             <button id="regex-search-btn">Search</button>
             <button id="regex-clear-btn">Clear</button>
@@ -614,6 +617,11 @@ class RegexHighlighter {
         this.searchPattern = '';
         // Clear persisted search state
         this.clearSearchState();
+        // Clear search input
+        const searchInput = document.getElementById('regex-search-input');
+        if (searchInput) {
+            searchInput.value = '';
+        }
         this.updateNavigation();
         this.clearScrollbarMarkers();
         this.updateButtonStates();
@@ -675,6 +683,29 @@ class RegexHighlighter {
         const nextBtn = document.getElementById('regex-next-btn');
         const counter = document.getElementById('regex-match-counter');
         const typeCountsElement = document.getElementById('regex-match-type-counts');
+        const statusIndicator = document.getElementById('regex-search-status');
+
+        // Update status indicator
+        if (statusIndicator) {
+            if (this.searchPattern && this.searchPattern.trim()) {
+                // Search is active
+                if (this.matches.length > 0) {
+                    // Has matches - green
+                    statusIndicator.classList.remove('regex-search-status-no-matches');
+                    statusIndicator.classList.add('regex-search-status-has-matches');
+                    statusIndicator.title = `Search active: ${this.matches.length} match${this.matches.length !== 1 ? 'es' : ''} found`;
+                } else {
+                    // No matches - red
+                    statusIndicator.classList.remove('regex-search-status-has-matches');
+                    statusIndicator.classList.add('regex-search-status-no-matches');
+                    statusIndicator.title = 'Search active: No matches found';
+                }
+            } else {
+                // No search active - remove indicator
+                statusIndicator.classList.remove('regex-search-status-has-matches', 'regex-search-status-no-matches');
+                statusIndicator.title = 'No active search';
+            }
+        }
 
         if (prevBtn && nextBtn && counter) {
             const total = this.matches.length;

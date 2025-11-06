@@ -129,13 +129,47 @@
     box-sizing: border-box;
 }
 
+.regex-search-input-wrapper {
+    position: relative;
+    width: 100%;
+}
+
 #regex-search-input {
     padding: 6px 10px;
+    padding-right: 28px;
+    /* Make room for status indicator */
     border: 1px solid #ddd;
     border-radius: 4px;
     font-size: 9.1px;
     width: 100%;
     box-sizing: border-box;
+}
+
+.regex-search-status {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: none;
+    pointer-events: none;
+    transition: background-color 0.2s ease;
+}
+
+.regex-search-status.regex-search-status-has-matches {
+    display: block;
+    background-color: #4caf50;
+    /* Green */
+    box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.3);
+}
+
+.regex-search-status.regex-search-status-no-matches {
+    display: block;
+    background-color: #f44336;
+    /* Red */
+    box-shadow: 0 0 0 2px rgba(244, 67, 54, 0.3);
 }
 
 #regex-search-input:focus {
