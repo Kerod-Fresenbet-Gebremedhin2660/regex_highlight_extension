@@ -22,6 +22,8 @@
 
 #regex-highlight-ui:not(.minimized) {
     width: 180px;
+    right: 36px !important;
+    /* Use same spacing as minimized state */
 }
 
 .regex-drag-handle {

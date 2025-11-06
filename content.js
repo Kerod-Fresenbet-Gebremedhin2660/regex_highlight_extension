@@ -47,6 +47,12 @@ class RegexHighlighter {
         // Check for persisted search on same domain (after UI is created)
         this.restoreSearchIfSameDomain();
 
+        // Sort patterns by match count on page load (after UI is ready)
+        // Use setTimeout to ensure DOM is fully ready
+        setTimeout(() => {
+            this.sortPatternsByMatchCount();
+        }, 100);
+
         // Listen for navigation events (for SPAs)
         this.setupNavigationListener();
 
@@ -353,8 +359,8 @@ class RegexHighlighter {
             }
             // Setup intersection observer for scroll tracking
             this.setupScrollTracking();
-            // Update pattern history display
-            this.renderSavedPatterns();
+            // Sort patterns by match count and update pattern history display
+            this.sortPatternsByMatchCount();
             // Update scrollbar markers
             this.updateScrollbarMarkers();
             // Update button states
@@ -845,7 +851,7 @@ class RegexHighlighter {
                     rafId = null;
                 }
 
-                // Apply final position - only vertical, keep right-anchored
+                // Apply final position - only vertical, keep right-anchored at 36px
                 const rect = overlay.getBoundingClientRect();
                 const finalTop = rect.top;
 
@@ -854,7 +860,7 @@ class RegexHighlighter {
                 overlay.style.transition = ''; // Re-enable transition
                 overlay.style.left = 'auto';
                 overlay.style.top = finalTop + 'px';
-                overlay.style.right = this.dragStartRight + 'px';
+                overlay.style.right = '36px'; // Always 36px (same spacing as minimized state)
                 overlay.style.bottom = 'auto';
 
                 this.isDragging = false;
@@ -902,7 +908,7 @@ class RegexHighlighter {
                     rafId = null;
                 }
 
-                // Apply final position - only vertical, keep right-anchored
+                // Apply final position - only vertical, keep right-anchored at 36px
                 const rect = overlay.getBoundingClientRect();
                 const finalTop = rect.top;
 
@@ -910,7 +916,7 @@ class RegexHighlighter {
                 overlay.style.transition = '';
                 overlay.style.left = 'auto';
                 overlay.style.top = finalTop + 'px';
-                overlay.style.right = this.dragStartRight + 'px';
+                overlay.style.right = '36px'; // Always 36px (same spacing as minimized state)
                 overlay.style.bottom = 'auto';
 
                 this.isDragging = false;
@@ -945,12 +951,10 @@ class RegexHighlighter {
 
     savePosition(overlay) {
         const rect = overlay.getBoundingClientRect();
-        const computedStyle = window.getComputedStyle(overlay);
 
-        // Save right position and top position (vertical only)
-        const right = computedStyle.right !== 'auto' ?
-            parseFloat(computedStyle.right) :
-            (window.innerWidth - rect.right);
+        // Always save 36px for right position (same spacing as minimized state)
+        // Widget is only draggable vertically, so right position stays fixed
+        const right = 36;
         const top = rect.top;
 
         // Ensure position is within bounds before saving
@@ -972,30 +976,28 @@ class RegexHighlighter {
     loadPosition(overlay) {
         try {
             const saved = localStorage.getItem('regex-highlight-position');
+
+            // Always use 36px for right position (same spacing for both minimized and expanded states)
+            // Only load saved top position for vertical placement
+            let top = 10;
             if (saved) {
-                const position = JSON.parse(saved);
-                // Ensure loaded position is within viewport
-                const rect = overlay.getBoundingClientRect();
-                const height = rect.height || 100; // fallback estimate
-
-                const maxTop = window.innerHeight - height;
-
-                // Handle both old format (left) and new format (right)
-                const right = position.right !== undefined ? position.right :
-                    (position.left !== undefined ? (window.innerWidth - position.left - (rect.width || 220)) : 36);
-                const clampedTop = Math.max(0, Math.min(position.top !== undefined ? position.top : 10, maxTop));
-
-                overlay.style.left = 'auto';
-                overlay.style.top = clampedTop + 'px';
-                overlay.style.right = right + 'px';
-                overlay.style.bottom = 'auto';
-            } else {
-                // No saved position - ensure right-anchored default
-                overlay.style.left = 'auto';
-                overlay.style.right = '36px';
-                overlay.style.top = '10px';
-                overlay.style.bottom = 'auto';
+                try {
+                    const position = JSON.parse(saved);
+                    const rect = overlay.getBoundingClientRect();
+                    const height = rect.height || 100;
+                    const maxTop = window.innerHeight - height;
+                    if (position.top !== undefined) {
+                        top = Math.max(0, Math.min(position.top, maxTop));
+                    }
+                } catch (e) {
+                    // Ignore parse errors, use default
+                }
             }
+
+            overlay.style.left = 'auto';
+            overlay.style.right = '36px'; // Always 36px (same spacing as minimized state)
+            overlay.style.top = top + 'px';
+            overlay.style.bottom = 'auto';
         } catch (e) {
             // Ignore errors, use default position (right-anchored)
             overlay.style.left = 'auto';
@@ -1285,6 +1287,186 @@ class RegexHighlighter {
         }
     }
 
+    removeLookaheadLookbehind(pattern) {
+        // Remove lookahead (?=...) and (?!...) and lookbehind (?<=...) and (?<!...) assertions
+        // This is a simplified parser that handles most cases
+        let result = '';
+        let i = 0;
+        let inCharClass = false;
+        let escapeNext = false;
+
+        while (i < pattern.length) {
+            const char = pattern[i];
+
+            if (escapeNext) {
+                result += char;
+                escapeNext = false;
+                i++;
+                continue;
+            }
+
+            if (char === '\\') {
+                result += char;
+                escapeNext = true;
+                i++;
+                continue;
+            }
+
+            if (char === '[') {
+                inCharClass = true;
+                result += char;
+                i++;
+                continue;
+            }
+
+            if (char === ']' && inCharClass) {
+                inCharClass = false;
+                result += char;
+                i++;
+                continue;
+            }
+
+            // Check for lookahead/lookbehind assertions (only outside character classes)
+            if (!inCharClass && char === '(' && i + 1 < pattern.length) {
+                const nextChar = pattern[i + 1];
+
+                // Check for lookahead: (?= or (?!
+                if (nextChar === '?' && i + 2 < pattern.length) {
+                    const afterQuestion = pattern[i + 2];
+                    if (afterQuestion === '=' || afterQuestion === '!') {
+                        // Found lookahead, skip to matching closing parenthesis
+                        let depth = 1;
+                        i += 3; // Skip past (?= or (?!
+                        while (i < pattern.length && depth > 0) {
+                            if (pattern[i] === '\\') {
+                                i += 2; // Skip escaped character
+                                continue;
+                            }
+                            if (pattern[i] === '(') depth++;
+                            if (pattern[i] === ')') depth--;
+                            i++;
+                        }
+                        continue; // Don't add the lookahead to result
+                    }
+
+                    // Check for lookbehind: (?<= or (?<!
+                    if (afterQuestion === '<' && i + 3 < pattern.length) {
+                        const afterLessThan = pattern[i + 3];
+                        if (afterLessThan === '=' || afterLessThan === '!') {
+                            // Found lookbehind, skip to matching closing parenthesis
+                            let depth = 1;
+                            i += 4; // Skip past (?<= or (?<!
+                            while (i < pattern.length && depth > 0) {
+                                if (pattern[i] === '\\') {
+                                    i += 2; // Skip escaped character
+                                    continue;
+                                }
+                                if (pattern[i] === '(') depth++;
+                                if (pattern[i] === ')') depth--;
+                                i++;
+                            }
+                            continue; // Don't add the lookbehind to result
+                        }
+                    }
+                }
+            }
+
+            result += char;
+            i++;
+        }
+
+        return result;
+    }
+
+    countMatchesForPattern(pattern) {
+        // Count matches for a pattern without highlighting
+        // Remove lookahead and lookbehind assertions before counting
+        try {
+            // Remove lookahead/lookbehind assertions
+            const cleanedPattern = this.removeLookaheadLookbehind(pattern);
+
+            // If pattern becomes empty after removing assertions, return 0
+            if (!cleanedPattern.trim()) {
+                return 0;
+            }
+
+            const flags = this.getRegexFlagsString();
+            const regex = new RegExp(cleanedPattern, flags);
+            let count = 0;
+
+            const walker = document.createTreeWalker(
+                document.body,
+                NodeFilter.SHOW_TEXT,
+                null,
+                false
+            );
+
+            let node;
+            while ((node = walker.nextNode())) {
+                const text = node.textContent;
+                if (!text) continue;
+
+                // Reset regex lastIndex for each node
+                regex.lastIndex = 0;
+                let match;
+                while ((match = regex.exec(text)) !== null) {
+                    count++;
+                    // Reset lastIndex to avoid infinite loop on zero-length matches
+                    if (match[0].length === 0) {
+                        regex.lastIndex++;
+                    }
+                }
+            }
+
+            return count;
+        } catch (e) {
+            // Invalid pattern, return 0
+            return 0;
+        }
+    }
+
+    sortPatternsByMatchCount() {
+        // Sort saved patterns by match count (most matches first)
+        if (this.savedPatterns.length === 0) return;
+
+        // Preserve original order for tie-breaking
+        const originalOrder = new Map();
+        this.savedPatterns.forEach((pattern, index) => {
+            originalOrder.set(pattern, index);
+        });
+
+        // Count matches for each pattern
+        const patternsWithCounts = this.savedPatterns.map(pattern => ({
+            pattern: pattern,
+            count: this.countMatchesForPattern(pattern),
+            originalIndex: originalOrder.get(pattern)
+        }));
+
+        // Sort by count (descending), then by original order for ties
+        patternsWithCounts.sort((a, b) => {
+            if (b.count !== a.count) {
+                return b.count - a.count; // Higher count first
+            }
+            // If counts are equal, maintain original order (first saved stays first)
+            return a.originalIndex - b.originalIndex;
+        });
+
+        // Update savedPatterns with sorted order
+        this.savedPatterns = patternsWithCounts.map(item => item.pattern);
+
+        // Save sorted order to localStorage
+        try {
+            localStorage.setItem('regex-highlight-patterns', JSON.stringify(this.savedPatterns));
+        } catch (e) {
+            console.warn('Could not save sorted patterns to localStorage', e);
+        }
+
+        // Re-render the pattern list (only if UI exists)
+        if (document.getElementById('regex-pattern-history')) {
+            this.renderSavedPatterns();
+        }
+    }
+
     loadSetting(key, defaultValue) {
         try {
             const saved = localStorage.getItem(`regex-highlight-setting-${key}`);
@@ -1344,17 +1526,24 @@ class RegexHighlighter {
             return;
         }
 
-        historyContainer.innerHTML = this.savedPatterns.map((pattern, index) => {
+        // Count matches for each pattern to display in UI
+        const patternsWithCounts = this.savedPatterns.map(pattern => ({
+            pattern: pattern,
+            count: this.countMatchesForPattern(pattern)
+        }));
+
+        historyContainer.innerHTML = patternsWithCounts.map((item, index) => {
             // Escape HTML for display and data attribute
             const escapeHtml = (str) => str.replace(/&/g, '&amp;')
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;')
                 .replace(/'/g, '&#039;');
-            const escapedPattern = escapeHtml(pattern);
-            const escapedDataPattern = escapeHtml(pattern);
-            return `<button class="regex-pattern-chip" data-pattern="${escapedDataPattern}" title="Click to use: ${pattern}">
-                <span class="regex-pattern-text">${escapedPattern}</span>
+            const escapedPattern = escapeHtml(item.pattern);
+            const escapedDataPattern = escapeHtml(item.pattern);
+            const countText = item.count > 0 ? ` (${item.count})` : '';
+            return `<button class="regex-pattern-chip" data-pattern="${escapedDataPattern}" title="Click to use: ${item.pattern}${countText ? ' - ' + item.count + ' matches' : ''}">
+                <span class="regex-pattern-text">${escapedPattern}${countText}</span>
                 <span class="regex-pattern-delete" data-delete-index="${index}" title="Delete pattern">×</span>
             </button>`;
         }).join('');
@@ -1564,6 +1753,8 @@ class RegexHighlighter {
 
                                 // Update UI
                                 this.setupScrollTracking();
+                                // Sort patterns by match count after navigation
+                                this.sortPatternsByMatchCount();
                                 this.updateScrollbarMarkers();
                                 this.updateNavigation();
                                 this.updateButtonStates();
