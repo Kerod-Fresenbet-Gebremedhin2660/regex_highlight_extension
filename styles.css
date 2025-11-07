@@ -123,10 +123,14 @@
     gap: 8px;
     position: relative;
     margin-top: 28px;
+    margin-left: -10px;
+    margin-right: -10px;
+    padding-left: 10px;
+    padding-right: 10px;
     overflow-y: auto;
     overflow-x: hidden;
     max-height: calc(100vh - 60px);
-    width: 100%;
+    width: calc(100% + 20px);
     box-sizing: border-box;
 }
 
@@ -707,7 +711,7 @@
     border-radius: 50%;
     transform: scale(0);
     animation: regex-ripple-animation 600ms ease-out;
-    background-color: rgba(255, 255, 255, 0.6);
+    background-color: rgba(0, 0, 0, 0.5);
     pointer-events: none;
     width: 100px;
     height: 100px;

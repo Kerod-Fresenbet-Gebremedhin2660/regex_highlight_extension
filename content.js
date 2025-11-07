@@ -29,7 +29,117 @@ class RegexHighlighter {
             multiline: this.loadSetting('regexFlagMultiline', false),
             dotAll: this.loadSetting('regexFlagDotAll', false)
         };
+        // Initialize Web Worker for regex matching
+        this.worker = null;
+        this.workerPendingRequests = new Map(); // Track pending requests
+        this.initWorker();
+        this.sortIdleCallbackId = null;
+        this.sortTimeoutId = null;
         this.init();
+    }
+
+    initWorker() {
+        try {
+            // Create Web Worker from blob URL to work with extension context
+            const workerCode = `
+                // Web Worker for regex pattern matching
+                self.onmessage = function(e) {
+                    const { type, pattern, flags, textNodes, alternatives } = e.data;
+
+                    if (type === 'findMatches') {
+                        try {
+                            const regex = new RegExp(pattern, flags);
+                            const matches = [];
+                            const matchTypes = alternatives && alternatives.length > 0 ? alternatives : [];
+
+                            const determineMatchType = (matchedText, alternatives) => {
+                                if (alternatives.length === 0) return null;
+                                const altFlags = flags.includes('i') ? 'i' : '';
+                                for (let i = 0; i < alternatives.length; i++) {
+                                    try {
+                                        const altRegex = new RegExp('^' + alternatives[i] + '$', altFlags);
+                                        if (altRegex.test(matchedText)) return i;
+                                    } catch (e) {
+                                        if (flags.includes('i')) {
+                                            if (matchedText.toLowerCase() === alternatives[i].toLowerCase()) return i;
+                                        } else {
+                                            if (matchedText === alternatives[i]) return i;
+                                        }
+                                    }
+                                }
+                                return 0;
+                            };
+
+                            textNodes.forEach((textNode, nodeIndex) => {
+                                const text = textNode.text;
+                                if (!text) return;
+                                regex.lastIndex = 0;
+                                let match;
+                                while ((match = regex.exec(text)) !== null) {
+                                    const matchedText = match[0];
+                                    const matchType = determineMatchType(matchedText, matchTypes);
+                                    matches.push({
+                                        nodeIndex: nodeIndex,
+                                        index: match.index,
+                                        length: match[0].length,
+                                        matchType: matchType
+                                    });
+                                    if (match[0].length === 0) regex.lastIndex++;
+                                }
+                            });
+
+                            self.postMessage({ type: 'matches', matches: matches, requestId: e.data.requestId });
+                        } catch (error) {
+                            self.postMessage({ type: 'error', error: error.message, requestId: e.data.requestId });
+                        }
+                    } else if (type === 'countMatches') {
+                        try {
+                            const regex = new RegExp(pattern, flags);
+                            let count = 0;
+                            textNodes.forEach((textNode) => {
+                                const text = textNode.text;
+                                if (!text) return;
+                                regex.lastIndex = 0;
+                                let match;
+                                while ((match = regex.exec(text)) !== null) {
+                                    count++;
+                                    if (match[0].length === 0) regex.lastIndex++;
+                                }
+                            });
+                            self.postMessage({ type: 'count', count: count, requestId: e.data.requestId });
+                        } catch (error) {
+                            self.postMessage({ type: 'error', error: error.message, requestId: e.data.requestId });
+                        }
+                    }
+                };
+            `;
+            const blob = new Blob([workerCode], { type: 'application/javascript' });
+            this.worker = new Worker(URL.createObjectURL(blob));
+
+            this.worker.onmessage = (e) => {
+                const { type, matches, count, error, requestId } = e.data;
+                const pendingRequest = this.workerPendingRequests.get(requestId);
+                if (pendingRequest) {
+                    this.workerPendingRequests.delete(requestId);
+                    if (type === 'matches') {
+                        pendingRequest.resolve(matches);
+                    } else if (type === 'count') {
+                        pendingRequest.resolve(count);
+                    } else if (type === 'error') {
+                        pendingRequest.reject(new Error(error));
+                    }
+                }
+            };
+
+            this.worker.onerror = (error) => {
+                console.error('Worker error:', error);
+                // Fallback to main thread if worker fails
+                this.worker = null;
+            };
+        } catch (error) {
+            console.warn('Could not create Web Worker, falling back to main thread:', error);
+            this.worker = null;
+        }
     }
 
     getRegexFlagsString() {
@@ -51,7 +161,7 @@ class RegexHighlighter {
         // Sort patterns by match count on page load (after UI is ready)
         // Use setTimeout to ensure DOM is fully ready
         setTimeout(() => {
-            this.sortPatternsByMatchCount();
+            this.scheduleSortPatternsByMatchCount();
         }, 100);
 
         // Listen for navigation events (for SPAs)
@@ -103,10 +213,12 @@ class RegexHighlighter {
             <span>Scroll to first match on search</span>
           </label>
           <div class="regex-collapsible-section">
-            <button class="regex-collapsible-header" id="regex-collapsible-toggle">
+            <div>
+                <button class="regex-collapsible-header" id="regex-collapsible-toggle">
               <span class="regex-collapsible-icon">${this.collapsibleExpanded ? '▼' : '▶'}</span>
               <span class="regex-collapsible-title">Flags & Patterns</span>
             </button>
+            </div>
             <div class="regex-collapsible-content" id="regex-collapsible-content" style="display: ${this.collapsibleExpanded ? 'block' : 'none'};">
               <div class="regex-flags-container">
                 <label class="regex-flag-label" title="Global: Find all matches (not just first)">
@@ -351,7 +463,7 @@ class RegexHighlighter {
         }
     }
 
-    search(pattern) {
+    async search(pattern) {
         // Clear any validation errors first
         const searchInput = document.getElementById('regex-search-input');
         if (searchInput) {
@@ -372,9 +484,9 @@ class RegexHighlighter {
             // Save search state for domain persistence
             this.saveSearchState(pattern);
 
-            this.clearHighlights();
-            this.findMatches();
-            this.highlightMatches();
+            await this.clearHighlights();
+            await this.findMatches();
+            await this.highlightMatches();
             this.currentIndex = this.matches.length > 0 ? 0 : -1;
             this.updateNavigation();
             if (this.currentIndex >= 0 && this.scrollOnSearch) {
@@ -383,7 +495,7 @@ class RegexHighlighter {
             // Setup intersection observer for scroll tracking
             this.setupScrollTracking();
             // Sort patterns by match count and update pattern history display
-            this.sortPatternsByMatchCount();
+            this.scheduleSortPatternsByMatchCount();
             // Update scrollbar markers
             this.updateScrollbarMarkers();
             // Update button states
@@ -502,10 +614,9 @@ class RegexHighlighter {
         return 0;
     }
 
-    findMatches() {
+    async findMatches() {
         this.matches = [];
         const flags = this.getRegexFlagsString();
-        const regex = new RegExp(this.searchPattern, flags);
 
         // Extract alternatives for type-based coloring
         const alternatives = this.extractAlternatives(this.searchPattern);
@@ -514,22 +625,111 @@ class RegexHighlighter {
         // Get the widget overlay to exclude from matching
         const widgetOverlay = document.getElementById('regex-highlight-ui');
 
-        const walker = document.createTreeWalker(
-            document.body,
-            NodeFilter.SHOW_TEXT,
-            null,
-            false
-        );
+        // Collect text nodes and their content in batches to avoid blocking
+        const textNodes = [];
+        const textNodeMap = new Map(); // Map index to actual DOM node
 
-        let node;
-        while ((node = walker.nextNode())) {
-            // Skip text nodes inside the widget overlay
-            if (widgetOverlay && widgetOverlay.contains(node)) {
-                continue;
+        // Use requestIdleCallback or setTimeout to yield to browser during collection
+        await this.collectTextNodesInBatches(widgetOverlay, textNodes, textNodeMap);
+
+        // Use worker if available, otherwise fallback to main thread
+        if (this.worker && textNodes.length > 0) {
+            try {
+                const requestId = Date.now() + Math.random();
+                const promise = new Promise((resolve, reject) => {
+                    this.workerPendingRequests.set(requestId, { resolve, reject });
+                });
+
+                this.worker.postMessage({
+                    type: 'findMatches',
+                    pattern: this.searchPattern,
+                    flags: flags,
+                    textNodes: textNodes,
+                    alternatives: this.matchTypes,
+                    requestId: requestId
+                });
+
+                const workerMatches = await promise;
+
+                // Map worker results back to DOM nodes
+                workerMatches.forEach(match => {
+                    const node = textNodeMap.get(match.nodeIndex);
+                    if (node) {
+                        this.matches.push({
+                            node: node,
+                            index: match.index,
+                            length: match.length,
+                            matchType: match.matchType
+                        });
+                    }
+                });
+            } catch (error) {
+                console.warn('Worker error, falling back to main thread:', error);
+                // Fallback to main thread
+                this.findMatchesMainThread(textNodes, textNodeMap, alternatives, flags);
             }
+        } else {
+            // Fallback to main thread if worker not available
+            this.findMatchesMainThread(textNodes, textNodeMap, alternatives, flags);
+        }
+    }
 
-            const text = node.textContent;
+    async collectTextNodesInBatches(widgetOverlay, textNodes, textNodeMap) {
+        return new Promise((resolve) => {
+            const walker = document.createTreeWalker(
+                document.body,
+                NodeFilter.SHOW_TEXT,
+                null,
+                false
+            );
+
+            const BATCH_SIZE = 100; // Process 100 nodes at a time
+            let processed = 0;
+            let node;
+
+            const processBatch = () => {
+                let count = 0;
+                while (count < BATCH_SIZE && (node = walker.nextNode())) {
+                    // Skip text nodes inside the widget overlay
+                    if (widgetOverlay && widgetOverlay.contains(node)) {
+                        continue;
+                    }
+
+                    const text = node.textContent;
+                    if (text && text.trim()) {
+                        const nodeIndex = textNodes.length;
+                        textNodes.push({ text: text });
+                        textNodeMap.set(nodeIndex, node);
+                    }
+                    count++;
+                    processed++;
+                }
+
+                if (node) {
+                    // More nodes to process - yield to browser
+                    setTimeout(processBatch, 0);
+                } else {
+                    // Done collecting
+                    resolve();
+                }
+            };
+
+            // Start processing
+            processBatch();
+        });
+    }
+
+    findMatchesMainThread(textNodes, textNodeMap, alternatives, flags) {
+        this.matches = [];
+        const regex = new RegExp(this.searchPattern, flags);
+
+        textNodes.forEach((textNode, nodeIndex) => {
+            const node = textNodeMap.get(nodeIndex);
+            if (!node) return;
+
+            const text = textNode.text;
             let match;
+            regex.lastIndex = 0;
             while ((match = regex.exec(text)) !== null) {
                 const matchedText = match[0];
                 const matchType = this.determineMatchType(matchedText, alternatives);
@@ -538,17 +738,17 @@ class RegexHighlighter {
                     node: node,
                     index: match.index,
                     length: match[0].length,
-                    matchType: matchType // Store which type this match is
+                    matchType: matchType
                 });
                 // Reset lastIndex to avoid infinite loop on zero-length matches
                 if (match[0].length === 0) {
                     regex.lastIndex++;
                 }
             }
-        }
+        });
     }
 
-    highlightMatches() {
+    async highlightMatches() {
         // Group matches by text node
         const matchesByNode = new Map();
         this.matches.forEach((match, idx) => {
@@ -558,70 +758,107 @@ class RegexHighlighter {
             matchesByNode.get(match.node).push({ ...match, originalIndex: idx });
         });
 
-        // Process each node - split once with all matches
-        matchesByNode.forEach((nodeMatches, node) => {
-            // Sort matches by index
-            nodeMatches.sort((a, b) => a.index - b.index);
+        // Process nodes in batches to avoid blocking UI
+        const nodes = Array.from(matchesByNode.keys());
+        const BATCH_SIZE = 50; // Process 50 nodes per frame
 
-            const text = node.textContent;
-            if (!text) return;
+        for (let i = 0; i < nodes.length; i += BATCH_SIZE) {
+            const batch = nodes.slice(i, i + BATCH_SIZE);
 
-            const parent = node.parentNode;
-            if (!parent) return;
-
-            const fragment = document.createDocumentFragment();
-            let lastIndex = 0;
-
-            nodeMatches.forEach(match => {
-                // Add text before this match
-                if (match.index > lastIndex) {
-                    fragment.appendChild(document.createTextNode(text.substring(lastIndex, match.index)));
-                }
-
-                // Add highlighted span for the match
-                const span = document.createElement('span');
-                let className = this.highlightClass;
-
-                // Add type-specific class if we have multiple types
-                if (match.matchType !== null && this.matchTypes.length > 1) {
-                    className += ` regex-highlight-type-${match.matchType}`;
-                }
-
-                span.className = className;
-                span.dataset.matchIndex = match.originalIndex.toString();
-                span.textContent = text.substring(match.index, match.index + match.length);
-                fragment.appendChild(span);
-
-                // Update match reference
-                this.matches[match.originalIndex].span = span;
-
-                lastIndex = match.index + match.length;
-            });
-
-            // Add remaining text after last match
-            if (lastIndex < text.length) {
-                fragment.appendChild(document.createTextNode(text.substring(lastIndex)));
+            // Yield to browser between batches
+            if (i > 0) {
+                await new Promise(resolve => requestAnimationFrame(resolve));
             }
 
-            // Replace the original node with the fragment
-            parent.replaceChild(fragment, node);
-        });
+            batch.forEach(node => {
+                const nodeMatches = matchesByNode.get(node);
+                if (!nodeMatches || nodeMatches.length === 0) return;
+
+                // Sort matches by index
+                nodeMatches.sort((a, b) => a.index - b.index);
+
+                const text = node.textContent;
+                if (!text) return;
+
+                const parent = node.parentNode;
+                if (!parent) return;
+
+                const fragment = document.createDocumentFragment();
+                let lastIndex = 0;
+
+                nodeMatches.forEach(match => {
+                    // Add text before this match
+                    if (match.index > lastIndex) {
+                        fragment.appendChild(document.createTextNode(text.substring(lastIndex, match.index)));
+                    }
+
+                    // Add highlighted span for the match
+                    const span = document.createElement('span');
+                    let className = this.highlightClass;
+
+                    // Add type-specific class if we have multiple types
+                    if (match.matchType !== null && this.matchTypes.length > 1) {
+                        className += ` regex-highlight-type-${match.matchType}`;
+                    }
+
+                    span.className = className;
+                    span.dataset.matchIndex = match.originalIndex.toString();
+                    span.textContent = text.substring(match.index, match.index + match.length);
+                    fragment.appendChild(span);
+
+                    // Update match reference
+                    this.matches[match.originalIndex].span = span;
+
+                    lastIndex = match.index + match.length;
+                });
+
+                // Add remaining text after last match
+                if (lastIndex < text.length) {
+                    fragment.appendChild(document.createTextNode(text.substring(lastIndex)));
+                }
+
+                // Replace the original node with the fragment
+                parent.replaceChild(fragment, node);
+            });
+        }
     }
 
-    clearHighlights() {
+    async clearHighlights() {
         const highlights = document.querySelectorAll(`.${this.highlightClass}`);
         const parentsToNormalize = new Set();
 
-        highlights.forEach(span => {
-            const parent = span.parentNode;
-            if (parent) {
-                parent.replaceChild(document.createTextNode(span.textContent), span);
-                parentsToNormalize.add(parent);
-            }
-        });
+        // Process highlights in batches to avoid blocking
+        const highlightArray = Array.from(highlights);
+        const BATCH_SIZE = 100;
 
-        // Normalize each affected parent once
-        parentsToNormalize.forEach(parent => parent.normalize());
+        for (let i = 0; i < highlightArray.length; i += BATCH_SIZE) {
+            const batch = highlightArray.slice(i, i + BATCH_SIZE);
+
+            // Yield to browser between batches
+            if (i > 0) {
+                await new Promise(resolve => requestAnimationFrame(resolve));
+            }
+
+            batch.forEach(span => {
+                const parent = span.parentNode;
+                if (parent) {
+                    parent.replaceChild(document.createTextNode(span.textContent), span);
+                    parentsToNormalize.add(parent);
+                }
+            });
+        }
+
+        // Normalize each affected parent once (also in batches)
+        const parentsArray = Array.from(parentsToNormalize);
+        for (let i = 0; i < parentsArray.length; i += BATCH_SIZE) {
+            const batch = parentsArray.slice(i, i + BATCH_SIZE);
+
+            if (i > 0) {
+                await new Promise(resolve => requestAnimationFrame(resolve));
+            }
+
+            batch.forEach(parent => parent.normalize());
+        }
 
         // Remove scroll listener
         if (this.scrollHandler) {
@@ -640,8 +877,8 @@ class RegexHighlighter {
         this.clearScrollbarMarkers();
     }
 
-    clear() {
-        this.clearHighlights();
+    async clear() {
+        await this.clearHighlights();
         this.searchPattern = '';
         // Clear persisted search state
         this.clearSearchState();
@@ -1549,7 +1786,7 @@ class RegexHighlighter {
         return result;
     }
 
-    countMatchesForPattern(pattern) {
+    async countMatchesForPattern(pattern) {
         // Count matches for a pattern without highlighting
         // Remove lookahead and lookbehind assertions before counting
         try {
@@ -1562,41 +1799,65 @@ class RegexHighlighter {
             }
 
             const flags = this.getRegexFlagsString();
-            const regex = new RegExp(cleanedPattern, flags);
-            let count = 0;
 
-            const walker = document.createTreeWalker(
-                document.body,
-                NodeFilter.SHOW_TEXT,
-                null,
-                false
-            );
+            // Collect text nodes in batches to avoid blocking
+            const textNodes = [];
+            await this.collectTextNodesInBatches(null, textNodes, new Map());
 
-            let node;
-            while ((node = walker.nextNode())) {
-                const text = node.textContent;
-                if (!text) continue;
+            // Use worker if available, otherwise fallback to main thread
+            if (this.worker && textNodes.length > 0) {
+                try {
+                    const requestId = Date.now() + Math.random();
+                    const promise = new Promise((resolve, reject) => {
+                        this.workerPendingRequests.set(requestId, { resolve, reject });
+                    });
 
-                // Reset regex lastIndex for each node
-                regex.lastIndex = 0;
-                let match;
-                while ((match = regex.exec(text)) !== null) {
-                    count++;
-                    // Reset lastIndex to avoid infinite loop on zero-length matches
-                    if (match[0].length === 0) {
-                        regex.lastIndex++;
-                    }
+                    this.worker.postMessage({
+                        type: 'countMatches',
+                        pattern: cleanedPattern,
+                        flags: flags,
+                        textNodes: textNodes,
+                        requestId: requestId
+                    });
+
+                    return await promise;
+                } catch (error) {
+                    console.warn('Worker error in countMatches, falling back to main thread:', error);
+                    // Fallback to main thread
+                    return this.countMatchesMainThread(cleanedPattern, flags, textNodes);
                 }
+            } else {
+                // Fallback to main thread if worker not available
+                return this.countMatchesMainThread(cleanedPattern, flags, textNodes);
             }
-
-            return count;
         } catch (e) {
             // Invalid pattern, return 0
             return 0;
         }
     }
 
-    sortPatternsByMatchCount() {
+    countMatchesMainThread(pattern, flags, textNodes) {
+        const regex = new RegExp(pattern, flags);
+        let count = 0;
+
+        textNodes.forEach((textNode) => {
+            const text = textNode.text;
+            if (!text) return;
+
+            regex.lastIndex = 0;
+            let match;
+            while ((match = regex.exec(text)) !== null) {
+                count++;
+                if (match[0].length === 0) {
+                    regex.lastIndex++;
+                }
+            }
+        });
+
+        return count;
+    }
+
+    async sortPatternsByMatchCount() {
         // Sort saved patterns by match count (most matches first)
         if (this.savedPatterns.length === 0) return;
 
@@ -1606,12 +1867,14 @@ class RegexHighlighter {
             originalOrder.set(pattern, index);
         });
 
-        // Count matches for each pattern
-        const patternsWithCounts = this.savedPatterns.map(pattern => ({
+        // Count matches for each pattern in parallel
+        const countPromises = this.savedPatterns.map(async (pattern) => ({
             pattern: pattern,
-            count: this.countMatchesForPattern(pattern),
+            count: await this.countMatchesForPattern(pattern),
             originalIndex: originalOrder.get(pattern)
         }));
+
+        const patternsWithCounts = await Promise.all(countPromises);
 
         // Sort by count (descending), then by original order for ties
         patternsWithCounts.sort((a, b) => {
@@ -1688,7 +1951,7 @@ class RegexHighlighter {
         }
     }
 
-    renderSavedPatterns() {
+    async renderSavedPatterns() {
         const historyContainer = document.getElementById('regex-pattern-history');
         if (!historyContainer) return;
 
@@ -1697,11 +1960,13 @@ class RegexHighlighter {
             return;
         }
 
-        // Count matches for each pattern to display in UI
-        const patternsWithCounts = this.savedPatterns.map(pattern => ({
+        // Count matches for each pattern to display in UI (in parallel)
+        const countPromises = this.savedPatterns.map(async (pattern) => ({
             pattern: pattern,
-            count: this.countMatchesForPattern(pattern)
+            count: await this.countMatchesForPattern(pattern)
         }));
+
+        const patternsWithCounts = await Promise.all(countPromises);
 
         historyContainer.innerHTML = patternsWithCounts.map((item, index) => {
             // Escape HTML for display and data attribute
@@ -1822,17 +2087,21 @@ class RegexHighlighter {
                                 if (flagDotAllCheckbox) flagDotAllCheckbox.checked = state.flags.dotAll === true;
                             }
                             // Perform the search
-                            this.clearHighlights();
-                            this.findMatches();
-                            this.highlightMatches();
-                            this.currentIndex = this.matches.length > 0 ? 0 : -1;
-                            if (this.currentIndex >= 0 && this.scrollOnSearch) {
-                                this.scrollToMatch(this.currentIndex);
-                            }
-                            this.setupScrollTracking();
-                            this.updateScrollbarMarkers();
-                            this.updateNavigation();
-                            this.updateButtonStates();
+                            (async () => {
+                                await this.clearHighlights();
+                                await this.findMatches();
+                                await this.highlightMatches();
+                                this.currentIndex = this.matches.length > 0 ? 0 : -1;
+                                if (this.currentIndex >= 0 && this.scrollOnSearch) {
+                                    this.scrollToMatch(this.currentIndex);
+                                }
+                                this.setupScrollTracking();
+                                // Sort patterns by match count after navigation
+                                this.scheduleSortPatternsByMatchCount();
+                                this.updateScrollbarMarkers();
+                                this.updateNavigation();
+                                this.updateButtonStates();
+                            })();
                         }, 200);
                     };
 
@@ -1883,7 +2152,9 @@ class RegexHighlighter {
                         if (state.domain !== currentDomain) {
                             this.clearSearchState();
                             this.searchPattern = '';
-                            this.clearHighlights();
+                            (async () => {
+                                await this.clearHighlights();
+                            })();
                             this.clearScrollbarMarkers();
                             this.updateNavigation();
                             this.updateButtonStates();
@@ -1919,23 +2190,25 @@ class RegexHighlighter {
                                 }
 
                                 // Clear existing highlights and re-search
-                                this.clearHighlights();
-                                this.findMatches();
-                                this.highlightMatches();
-                                this.currentIndex = this.matches.length > 0 ? 0 : -1;
+                                (async () => {
+                                    await this.clearHighlights();
+                                    await this.findMatches();
+                                    await this.highlightMatches();
+                                    this.currentIndex = this.matches.length > 0 ? 0 : -1;
 
-                                // Scroll to first match if enabled
-                                if (this.currentIndex >= 0 && this.scrollOnSearch) {
-                                    this.scrollToMatch(this.currentIndex);
-                                }
+                                    // Scroll to first match if enabled
+                                    if (this.currentIndex >= 0 && this.scrollOnSearch) {
+                                        this.scrollToMatch(this.currentIndex);
+                                    }
 
-                                // Update UI
-                                this.setupScrollTracking();
-                                // Sort patterns by match count after navigation
-                                this.sortPatternsByMatchCount();
-                                this.updateScrollbarMarkers();
-                                this.updateNavigation();
-                                this.updateButtonStates();
+                                    // Update UI
+                                    this.setupScrollTracking();
+                                    // Sort patterns by match count after navigation
+                                    this.scheduleSortPatternsByMatchCount();
+                                    this.updateScrollbarMarkers();
+                                    this.updateNavigation();
+                                    this.updateButtonStates();
+                                })();
                             }, 500); // Wait 500ms for SPA content to load
                         }
                     }
@@ -2023,6 +2296,30 @@ class RegexHighlighter {
 
         // Also listen for hash changes
         window.addEventListener('hashchange', checkNavigation);
+    }
+
+    scheduleSortPatternsByMatchCount() {
+        const runSort = () => {
+            this.sortIdleCallbackId = null;
+            this.sortTimeoutId = null;
+            this.sortPatternsByMatchCount().catch(err => console.warn('Error sorting patterns:', err));
+        };
+
+        if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+            if (this.sortIdleCallbackId !== null && 'cancelIdleCallback' in window) {
+                window.cancelIdleCallback(this.sortIdleCallbackId);
+            }
+            this.sortIdleCallbackId = window.requestIdleCallback(() => {
+                runSort();
+            }, { timeout: 2000 });
+        } else {
+            if (this.sortTimeoutId !== null) {
+                clearTimeout(this.sortTimeoutId);
+            }
+            this.sortTimeoutId = setTimeout(() => {
+                runSort();
+            }, 100);
+        }
     }
 }
 
