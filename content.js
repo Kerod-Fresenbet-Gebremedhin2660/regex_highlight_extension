@@ -491,6 +491,9 @@ class RegexHighlighter {
         const alternatives = this.extractAlternatives(this.searchPattern);
         this.matchTypes = alternatives.length > 0 ? alternatives : [];
 
+        // Get the widget overlay to exclude from matching
+        const widgetOverlay = document.getElementById('regex-highlight-ui');
+
         const walker = document.createTreeWalker(
             document.body,
             NodeFilter.SHOW_TEXT,
@@ -500,6 +503,11 @@ class RegexHighlighter {
 
         let node;
         while ((node = walker.nextNode())) {
+            // Skip text nodes inside the widget overlay
+            if (widgetOverlay && widgetOverlay.contains(node)) {
+                continue;
+            }
+
             const text = node.textContent;
             let match;
             while ((match = regex.exec(text)) !== null) {
