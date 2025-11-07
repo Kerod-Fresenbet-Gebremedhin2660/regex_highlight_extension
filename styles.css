@@ -96,6 +96,7 @@
     justify-content: center !important;
     transition: background-color 0.2s !important;
     z-index: 2;
+    overflow: hidden !important;
 }
 
 .regex-minimize-btn:hover {
@@ -208,6 +209,8 @@
     transition: background-color 0.2s !important;
     background-color: #808080 !important;
     color: #000000 !important;
+    position: relative !important;
+    overflow: hidden !important;
 }
 
 #regex-search-btn {
@@ -269,13 +272,56 @@
     flex: 1;
 }
 
+.regex-collapsible-section {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #e0e0e0;
+}
+
+.regex-collapsible-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 6px 8px;
+    border: none;
+    background-color: transparent;
+    cursor: pointer;
+    font-size: 8.4px;
+    font-weight: 600;
+    color: #555;
+    text-align: left;
+    transition: background-color 0.2s;
+    border-radius: 4px;
+    user-select: none;
+}
+
+.regex-collapsible-header:hover {
+    background-color: #f0f0f0;
+}
+
+.regex-collapsible-icon {
+    font-size: 9px;
+    line-height: 1;
+    transition: transform 0.2s;
+    color: #808080;
+}
+
+.regex-collapsible-title {
+    flex: 1;
+}
+
+.regex-collapsible-content {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #e0e0e0;
+}
+
 .regex-flags-container {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-    margin-top: 8px;
-    padding-top: 8px;
-    border-top: 1px solid #e0e0e0;
+    margin-bottom: 8px;
 }
 
 .regex-flag-label {
@@ -307,7 +353,7 @@
     flex-direction: column;
     flex-wrap: nowrap;
     gap: 4px;
-    margin-top: 6px;
+    margin-top: 0;
     max-height: 60px;
     overflow-y: scroll;
     overflow-x: hidden;
@@ -395,6 +441,8 @@
     color: #000000 !important;
     padding: 5px 10px !important;
     font-size: 8.4px !important;
+    position: relative !important;
+    overflow: hidden !important;
 }
 
 #regex-prev-btn:hover:not(:disabled),
@@ -651,4 +699,37 @@
 .regex-search-buttons-container {
     display: flex;
     justify-content: space-between;
+}
+
+/* Ripple effect styles */
+.regex-ripple {
+    position: absolute;
+    border-radius: 50%;
+    transform: scale(0);
+    animation: regex-ripple-animation 600ms ease-out;
+    background-color: rgba(255, 255, 255, 0.6);
+    pointer-events: none;
+    width: 100px;
+    height: 100px;
+    margin-left: -50px;
+    margin-top: -50px;
+}
+
+@keyframes regex-ripple-animation {
+    to {
+        transform: scale(4);
+        opacity: 0;
+    }
+}
+
+/* Ensure collapsible header buttons also support ripple */
+.regex-collapsible-header {
+    position: relative;
+    overflow: hidden;
+}
+
+/* Ensure pattern chips support ripple */
+.regex-pattern-chip {
+    position: relative;
+    overflow: hidden;
 }

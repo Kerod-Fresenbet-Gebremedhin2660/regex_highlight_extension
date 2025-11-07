@@ -14,6 +14,7 @@ class RegexHighlighter {
         this.savedPatterns = this.loadSavedPatterns();
         this.maxSavedPatterns = 8;
         this.isDragging = false;
+        this.collapsibleExpanded = this.loadSetting('collapsibleExpanded', true);
         this.dragStartX = 0;
         this.dragStartY = 0;
         this.dragStartLeft = 0;
@@ -101,33 +102,43 @@ class RegexHighlighter {
             <input type="checkbox" id="regex-scroll-on-search" ${this.scrollOnSearch ? 'checked' : ''}>
             <span>Scroll to first match on search</span>
           </label>
-          <div class="regex-flags-container">
-            <label class="regex-flag-label" title="Global: Find all matches (not just first)">
-              <input type="checkbox" id="regex-flag-global" ${this.regexFlags.global ? 'checked' : ''}>
-              <span>g (Global)</span>
-            </label>
-            <label class="regex-flag-label" title="Case-insensitive">
-              <input type="checkbox" id="regex-flag-ignorecase" ${this.regexFlags.ignoreCase ? 'checked' : ''}>
-              <span>i (Ignore Case)</span>
-            </label>
-            <label class="regex-flag-label" title="Multiline: ^ and $ match line breaks">
-              <input type="checkbox" id="regex-flag-multiline" ${this.regexFlags.multiline ? 'checked' : ''}>
-              <span>m (Multiline)</span>
-            </label>
-            <label class="regex-flag-label" title="DotAll: . matches newline">
-              <input type="checkbox" id="regex-flag-dotall" ${this.regexFlags.dotAll ? 'checked' : ''}>
-              <span>s (DotAll)</span>
-            </label>
+          <div class="regex-collapsible-section">
+            <button class="regex-collapsible-header" id="regex-collapsible-toggle">
+              <span class="regex-collapsible-icon">${this.collapsibleExpanded ? '▼' : '▶'}</span>
+              <span class="regex-collapsible-title">Flags & Patterns</span>
+            </button>
+            <div class="regex-collapsible-content" id="regex-collapsible-content" style="display: ${this.collapsibleExpanded ? 'block' : 'none'};">
+              <div class="regex-flags-container">
+                <label class="regex-flag-label" title="Global: Find all matches (not just first)">
+                  <input type="checkbox" id="regex-flag-global" ${this.regexFlags.global ? 'checked' : ''}>
+                  <span>g (Global)</span>
+                </label>
+                <label class="regex-flag-label" title="Case-insensitive">
+                  <input type="checkbox" id="regex-flag-ignorecase" ${this.regexFlags.ignoreCase ? 'checked' : ''}>
+                  <span>i (Ignore Case)</span>
+                </label>
+                <label class="regex-flag-label" title="Multiline: ^ and $ match line breaks">
+                  <input type="checkbox" id="regex-flag-multiline" ${this.regexFlags.multiline ? 'checked' : ''}>
+                  <span>m (Multiline)</span>
+                </label>
+                <label class="regex-flag-label" title="DotAll: . matches newline">
+                  <input type="checkbox" id="regex-flag-dotall" ${this.regexFlags.dotAll ? 'checked' : ''}>
+                  <span>s (DotAll)</span>
+                </label>
+              </div>
+              <div id="regex-pattern-history" class="regex-pattern-history"></div>
+            </div>
           </div>
         </div>
-        <div id="regex-pattern-history" class="regex-pattern-history"></div>
         <div class="regex-navigation">
           <button id="regex-prev-btn" disabled>◀ Prev</button>
           <div class="regex-match-counter-container">
             <span id="regex-match-counter">0 / 0</span>
-            <span id="regex-match-type-counts" class="regex-match-type-counts"></span>
           </div>
           <button id="regex-next-btn" disabled>Next ▶</button>
+        </div>
+        <div>
+            <span id="regex-match-type-counts" class="regex-match-type-counts"></span>
         </div>
       </div>
     `;
@@ -239,11 +250,20 @@ class RegexHighlighter {
         prevBtn.addEventListener('click', () => this.previous());
         nextBtn.addEventListener('click', () => this.next());
 
+        // Collapsible toggle handler
+        const collapsibleToggle = document.getElementById('regex-collapsible-toggle');
+        if (collapsibleToggle) {
+            collapsibleToggle.addEventListener('click', () => this.toggleCollapsible());
+        }
+
         // Render saved patterns
         this.renderSavedPatterns();
 
         // Create scrollbar markers
         this.createScrollbarMarkers();
+
+        // Setup ripple effects for all buttons
+        this.setupRippleEffects();
 
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
@@ -812,6 +832,24 @@ class RegexHighlighter {
         }
     }
 
+    toggleCollapsible() {
+        this.collapsibleExpanded = !this.collapsibleExpanded;
+        const content = document.getElementById('regex-collapsible-content');
+        const toggle = document.getElementById('regex-collapsible-toggle');
+        const icon = toggle ? toggle.querySelector('.regex-collapsible-icon') : null;
+
+        if (content) {
+            content.style.display = this.collapsibleExpanded ? 'block' : 'none';
+        }
+
+        if (icon) {
+            icon.textContent = this.collapsibleExpanded ? '▼' : '▶';
+        }
+
+        // Save state
+        this.saveSetting('collapsibleExpanded', this.collapsibleExpanded);
+    }
+
     setupDragging(overlay) {
         const dragHandle = overlay.querySelector('.regex-drag-handle');
         if (!dragHandle) return;
@@ -986,6 +1024,100 @@ class RegexHighlighter {
                 this.updateScrollbarMarkers();
             }, 100);
         });
+    }
+
+    setupRippleEffects() {
+        // Function to create ripple effect on button click/touch
+        const createRipple = (e, button) => {
+            // Don't create ripple if button is disabled
+            if (button.disabled) return;
+
+            const rect = button.getBoundingClientRect();
+            const size = Math.max(rect.width, rect.height);
+
+            // Get coordinates from either mouse or touch event
+            const clientX = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : e.changedTouches[0].clientX);
+            const clientY = e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : e.changedTouches[0].clientY);
+
+            const x = clientX - rect.left - size / 2;
+            const y = clientY - rect.top - size / 2;
+
+            const ripple = document.createElement('span');
+            ripple.classList.add('regex-ripple');
+            ripple.style.width = ripple.style.height = `${size}px`;
+            ripple.style.left = `${x}px`;
+            ripple.style.top = `${y}px`;
+
+            // Remove any existing ripples
+            const existingRipples = button.querySelectorAll('.regex-ripple');
+            existingRipples.forEach(r => r.remove());
+
+            button.appendChild(ripple);
+
+            // Remove ripple after animation completes
+            ripple.addEventListener('animationend', () => {
+                ripple.remove();
+            });
+        };
+
+        // Apply ripple effect to all buttons in the UI
+        const applyRippleToButton = (button) => {
+            if (!button) return;
+            // Remove existing listeners to avoid duplicates
+            if (button._rippleClickHandler) {
+                button.removeEventListener('click', button._rippleClickHandler);
+            }
+            if (button._rippleTouchHandler) {
+                button.removeEventListener('touchstart', button._rippleTouchHandler);
+            }
+            // Create new handlers
+            button._rippleClickHandler = (e) => createRipple(e, button);
+            button._rippleTouchHandler = (e) => createRipple(e, button);
+            button.addEventListener('click', button._rippleClickHandler);
+            button.addEventListener('touchstart', button._rippleTouchHandler, { passive: true });
+        };
+
+        // Apply to all existing buttons
+        const buttons = [
+            document.getElementById('regex-minimize-btn'),
+            document.getElementById('regex-search-btn'),
+            document.getElementById('regex-clear-btn'),
+            document.getElementById('regex-prev-btn'),
+            document.getElementById('regex-next-btn'),
+            document.getElementById('regex-collapsible-toggle')
+        ];
+
+        buttons.forEach(applyRippleToButton);
+
+        // Apply to pattern chips (they're created dynamically)
+        const patternHistoryContainer = document.getElementById('regex-pattern-history');
+        if (patternHistoryContainer) {
+            // Use MutationObserver to handle dynamically added pattern chips
+            const patternObserver = new MutationObserver((mutations) => {
+                mutations.forEach((mutation) => {
+                    mutation.addedNodes.forEach((node) => {
+                        if (node.nodeType === Node.ELEMENT_NODE) {
+                            // Apply ripple to the pattern chip button
+                            if (node.classList.contains('regex-pattern-chip')) {
+                                applyRippleToButton(node);
+                            }
+                        }
+                    });
+                });
+            });
+
+            patternObserver.observe(patternHistoryContainer, {
+                childList: true,
+                subtree: true
+            });
+
+            // Also apply to existing pattern chips
+            const existingChips = patternHistoryContainer.querySelectorAll('.regex-pattern-chip');
+            existingChips.forEach(applyRippleToButton);
+
+            // Store the applyRippleToButton function so it can be called from renderSavedPatterns
+            this._applyRippleToButton = applyRippleToButton;
+        }
     }
 
     savePosition(overlay) {
@@ -1617,6 +1749,13 @@ class RegexHighlighter {
                 }
             });
         });
+
+        // Apply ripple effects to newly rendered pattern chips
+        if (this._applyRippleToButton) {
+            historyContainer.querySelectorAll('.regex-pattern-chip').forEach(chip => {
+                this._applyRippleToButton(chip);
+            });
+        }
     }
 
     getDomain() {
