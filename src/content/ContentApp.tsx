@@ -249,7 +249,7 @@ const ContentApp = () => {
 
     const handleSearch = useCallback(async () => {
         const pattern = searchInput.trim();
-        if (!pattern) {
+        if (!pattern || pattern.length < 2) {
             return;
         }
         const highlighter = highlighterRef.current;
@@ -357,7 +357,9 @@ const ContentApp = () => {
         setSearchInput(pattern);
         inputDirtyRef.current = false;
         setValidationError(null);
-        void highlighterRef.current?.search(pattern);
+        if (pattern.trim().length >= 2) {
+            void highlighterRef.current?.search(pattern);
+        }
     }, []);
 
     const handlePatternDelete = useCallback((index: number) => {
@@ -543,8 +545,14 @@ const ContentApp = () => {
             switch (message.action) {
                 case 'search':
                     if (message.pattern) {
-                        setSearchInput(message.pattern);
-                        void highlighterRef.current?.search(message.pattern).then(
+                        const trimmed = message.pattern.trim();
+                        if (trimmed.length < 2) {
+                            setValidationError('Enter at least two characters');
+                            sendResponse({ success: false });
+                            return true;
+                        }
+                        setSearchInput(trimmed);
+                        void highlighterRef.current?.search(trimmed).then(
                             () => sendResponse({ success: true }),
                             () => sendResponse({ success: false })
                         );
@@ -716,7 +724,7 @@ const ContentApp = () => {
                                 <Stack direction="row" spacing={1}>
                                     <Button
                                         onClick={() => void handleSearch()}
-                                        disabled={!searchInput.trim()}
+                                        disabled={searchInput.trim().length < 2}
                                         startIcon={<SearchIcon fontSize="small" />}
                                         size="medium"
                                         sx={{
