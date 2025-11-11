@@ -18,6 +18,7 @@
     max-width: calc(100vw - 20px);
     max-height: calc(100vh - 20px);
     overflow: hidden;
+    transform-origin: top right;
 }
 
 #regex-highlight-ui:not(.minimized) {
@@ -578,6 +579,7 @@
     pointer-events: none;
     padding: 10px 2px;
     box-sizing: border-box;
+    transform-origin: top right;
 }
 
 .regex-scrollbar-marker {

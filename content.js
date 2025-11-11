@@ -20,6 +20,12 @@ class RegexHighlighter {
         this.dragStartLeft = 0;
         this.dragStartTop = 0;
         this.scrollbarMarkerContainer = null;
+        this.currentUIScale = 1;
+        this.currentOverlayTranslateY = 0;
+        this.baseDevicePixelRatio = window.devicePixelRatio || 1;
+        this.updateUIScaleBound = null;
+        this.zoomHandlingSetup = false;
+        this.useZoomFallback = false;
         this.scrollOnSearch = this.loadSetting('scrollOnSearch', false);
         this.matchTypes = []; // Store alternative types for multi-type coloring
         // Regex flags - default to 'gi' (global and case-insensitive) to match current behavior
@@ -371,36 +377,38 @@ class RegexHighlighter {
         // Setup ripple effects for all buttons
         this.setupRippleEffects();
 
+        // Ensure UI scale stays consistent regardless of browser zoom
+        this.setupZoomHandling();
+
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
-            if (e.ctrlKey || e.metaKey) {
-                if ((e.key === 'f' || e.key === 'F') && !e.shiftKey) {
-                    e.preventDefault();
-                    if (this.isMinimized) {
-                        // If minimized: unminimize and focus search
-                        // Check for selected text first
-                        const selectedText = window.getSelection().toString().trim();
+            const key = e.key ? e.key.toLowerCase() : '';
+            if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'f') {
+                e.preventDefault();
+                if (this.isMinimized) {
+                    // If minimized: unminimize and focus search
+                    // Check for selected text first
+                    const selectedText = window.getSelection().toString().trim();
 
-                        this.toggleMinimize();
-                        // Small delay to ensure widget is expanded before focusing
-                        setTimeout(() => {
-                            const input = document.getElementById('regex-search-input');
-                            if (input) {
-                                // If there's selected text, use it for search
-                                if (selectedText) {
-                                    input.value = selectedText;
-                                    // Trigger search with the selected text
-                                    this.search(selectedText);
-                                } else {
-                                    input.focus();
-                                    input.select(); // Select existing text for easy replacement
-                                }
+                    this.toggleMinimize();
+                    // Small delay to ensure widget is expanded before focusing
+                    setTimeout(() => {
+                        const input = document.getElementById('regex-search-input');
+                        if (input) {
+                            // If there's selected text, use it for search
+                            if (selectedText) {
+                                input.value = selectedText;
+                                // Trigger search with the selected text
+                                this.search(selectedText);
+                            } else {
+                                input.focus();
+                                input.select(); // Select existing text for easy replacement
                             }
-                        }, 50);
-                    } else {
-                        // If maximized: minimize
-                        this.toggleMinimize();
-                    }
+                        }
+                    }, 50);
+                } else {
+                    // If maximized: minimize
+                    this.toggleMinimize();
                 }
             }
             if (e.key === 'F3' || (e.shiftKey && e.key === 'F3')) {
@@ -1087,14 +1095,14 @@ class RegexHighlighter {
 
         let rafId = null;
 
-        const handleMove = (clientX, clientY) => {
+        const handleMove = (_clientX, clientY) => {
             if (!this.isDragging) return;
 
             // Only use vertical movement (deltaY)
             const deltaY = clientY - this.dragStartY;
 
-            // Get current dimensions (before transform)
-            const height = overlay.offsetHeight || overlay.getBoundingClientRect().height;
+            const overlayRect = overlay.getBoundingClientRect();
+            const height = overlayRect.height;
 
             // Calculate desired vertical position
             let newTop = this.dragStartTop + deltaY;
@@ -1111,7 +1119,7 @@ class RegexHighlighter {
 
             // Only apply vertical transform - horizontal stays fixed (right-anchored)
             const finalDeltaY = newTop - this.dragStartTop;
-            overlay.style.transform = `translateY(${finalDeltaY}px)`;
+            this.applyOverlayTransform(finalDeltaY);
         };
 
         const handleMoveRAF = (clientX, clientY) => {
@@ -1164,7 +1172,7 @@ class RegexHighlighter {
                 const finalTop = rect.top;
 
                 // Reset transform and set final position
-                overlay.style.transform = '';
+                this.applyOverlayTransform(0);
                 overlay.style.transition = ''; // Re-enable transition
                 overlay.style.left = 'auto';
                 overlay.style.top = finalTop + 'px';
@@ -1220,7 +1228,7 @@ class RegexHighlighter {
                 const rect = overlay.getBoundingClientRect();
                 const finalTop = rect.top;
 
-                overlay.style.transform = '';
+                this.applyOverlayTransform(0);
                 overlay.style.transition = '';
                 overlay.style.left = 'auto';
                 overlay.style.top = finalTop + 'px';
@@ -1255,6 +1263,95 @@ class RegexHighlighter {
                 this.updateScrollbarMarkers();
             }, 100);
         });
+    }
+
+    setupZoomHandling() {
+        if (!this.overlay) return;
+
+        if (!this.updateUIScaleBound) {
+            this.updateUIScaleBound = this.updateUIScale.bind(this);
+        }
+
+        this.useZoomFallback = !('zoom' in this.overlay.style);
+
+        if (!this.zoomHandlingSetup) {
+            window.addEventListener('resize', this.updateUIScaleBound);
+            if (window.visualViewport && typeof window.visualViewport.addEventListener === 'function') {
+                window.visualViewport.addEventListener('resize', this.updateUIScaleBound);
+            }
+            this.zoomHandlingSetup = true;
+        }
+
+        this.updateUIScale();
+    }
+
+    getCurrentZoomScale() {
+        if (window.visualViewport && typeof window.visualViewport.scale === 'number') {
+            const viewportScale = window.visualViewport.scale;
+            return viewportScale && viewportScale > 0 ? viewportScale : 1;
+        }
+
+        const baseRatio = this.baseDevicePixelRatio || 1;
+        const currentRatio = window.devicePixelRatio || baseRatio;
+        if (baseRatio <= 0) {
+            return 1;
+        }
+        return currentRatio / baseRatio;
+    }
+
+    updateUIScale() {
+        const zoomScale = this.getCurrentZoomScale();
+        const scale = zoomScale > 0 ? 1 / zoomScale : 1;
+        this.currentUIScale = scale;
+
+        const overlay = this.overlay || document.getElementById('regex-highlight-ui');
+        if (overlay) {
+            if (this.useZoomFallback) {
+                overlay.style.zoom = '';
+            } else {
+                overlay.style.zoom = `${scale}`;
+            }
+        }
+
+        this.applyOverlayTransform();
+        this.applyMarkerScale(scale);
+    }
+
+    applyOverlayTransform(translateY) {
+        const overlay = this.overlay || document.getElementById('regex-highlight-ui');
+        if (!overlay) return;
+
+        if (typeof translateY === 'number' && !Number.isNaN(translateY)) {
+            this.currentOverlayTranslateY = translateY;
+        }
+
+        const translateValue = typeof this.currentOverlayTranslateY === 'number' ? this.currentOverlayTranslateY : 0;
+
+        if (this.useZoomFallback) {
+            const scale = this.currentUIScale || 1;
+            overlay.style.transformOrigin = 'top right';
+            overlay.style.transform = `translateY(${translateValue}px) scale(${scale})`;
+        } else {
+            overlay.style.transformOrigin = '';
+            overlay.style.transform = `translateY(${translateValue}px)`;
+        }
+    }
+
+    applyMarkerScale(scale) {
+        const container = this.scrollbarMarkerContainer || document.getElementById('regex-scrollbar-markers');
+        if (!container) return;
+
+        const effectiveScale = (typeof scale === 'number' && scale > 0) ? scale : (this.currentUIScale || 1);
+
+        if (this.useZoomFallback) {
+            container.style.transformOrigin = 'top right';
+            container.style.transform = `scale(${effectiveScale})`;
+            container.style.zoom = '';
+        } else {
+            container.style.transformOrigin = '';
+            container.style.transform = '';
+            container.style.zoom = `${effectiveScale}`;
+        }
     }
 
     setupRippleEffects() {
@@ -1535,6 +1632,7 @@ class RegexHighlighter {
         document.body.appendChild(container);
 
         this.scrollbarMarkerContainer = container;
+        this.applyMarkerScale(this.currentUIScale);
     }
 
     updateScrollbarMarkers() {
