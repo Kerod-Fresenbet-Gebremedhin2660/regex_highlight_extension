@@ -18,6 +18,7 @@
     max-width: calc(100vw - 20px);
     max-height: calc(100vh - 20px);
     overflow: hidden;
+    transform-origin: top right;
 }
 
 #regex-highlight-ui:not(.minimized) {
@@ -71,6 +72,20 @@
 
 #regex-highlight-ui.minimized .regex-search-container {
     display: none;
+}
+
+#regex-highlight-ui .regex-hide-btn {
+    margin-left: 8px;
+    background: transparent;
+    border: none;
+    color: inherit;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 0 4px;
+}
+
+#regex-highlight-ui .regex-hide-btn:hover {
+    color: #666;
 }
 
 .regex-minimize-btn {
@@ -133,6 +148,7 @@
 }
 
 .regex-search-input-wrapper {
+    color: #fff;
     position: relative;
     width: 100%;
 }
@@ -281,18 +297,20 @@
 }
 
 .regex-collapsible-header {
+    color: #fff;
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 6px;
-    width: 100%;
+    width: 80%;
+    margin: 0 auto;
     padding: 6px 8px;
     border: none;
     background-color: transparent;
     cursor: pointer;
     font-size: 8.4px;
     font-weight: 600;
-    color: #555;
-    text-align: left;
+    text-align: center;
     transition: background-color 0.2s;
     border-radius: 4px;
     user-select: none;
@@ -424,7 +442,7 @@
 .regex-navigation {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: space-around;
     gap: 8px;
     margin-top: 3px;
 }
@@ -575,6 +593,7 @@
     pointer-events: none;
     padding: 10px 2px;
     box-sizing: border-box;
+    transform-origin: top right;
 }
 
 .regex-scrollbar-marker {
@@ -700,7 +719,7 @@
 
 .regex-search-buttons-container {
     display: flex;
-    justify-content: space-between;
+    justify-content: space-around;
 }
 
 /* Ripple effect styles */
