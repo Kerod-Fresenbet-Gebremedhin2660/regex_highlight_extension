@@ -151,7 +151,7 @@ const PopupApp = () => {
             elevation={6}
             sx={{
                 p: 2,
-                width: 320,
+                width: 380,
                 maxWidth: '100%',
                 display: 'flex',
                 flexDirection: 'column',

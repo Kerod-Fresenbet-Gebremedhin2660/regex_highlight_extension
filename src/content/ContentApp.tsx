@@ -662,32 +662,30 @@ const ContentApp = () => {
                         )}
                     </Stack>
                     <Stack direction="row" spacing={1}>
-                        <Tooltip title={isMinimized ? 'Expand' : 'Minimize'}>
-                            <IconButton
-                                size="small"
-                                color="inherit"
-                                onClick={toggleMinimize}
-                                sx={{
-                                    bgcolor: 'rgba(255,255,255,0.15)',
-                                    '&:hover': { bgcolor: 'rgba(255,255,255,0.3)' }
-                                }}
-                            >
-                                {isMinimized ? <UnfoldMoreIcon fontSize="small" /> : <UnfoldLessIcon fontSize="small" />}
-                            </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Hide widget">
-                            <IconButton
-                                size="small"
-                                color="inherit"
-                                onClick={handleToggleVisibility}
-                                sx={{
-                                    bgcolor: 'rgba(255,255,255,0.15)',
-                                    '&:hover': { bgcolor: 'rgba(255,255,255,0.3)' }
-                                }}
-                            >
-                                <CloseIcon fontSize="small" />
-                            </IconButton>
-                        </Tooltip>
+                        <IconButton
+                            size="small"
+                            color="inherit"
+                            onClick={toggleMinimize}
+                            aria-label={isMinimized ? 'Expand widget' : 'Minimize widget'}
+                            sx={{
+                                bgcolor: 'rgba(255,255,255,0.15)',
+                                '&:hover': { bgcolor: 'rgba(255,255,255,0.3)' }
+                            }}
+                        >
+                            {isMinimized ? <UnfoldMoreIcon fontSize="small" /> : <UnfoldLessIcon fontSize="small" />}
+                        </IconButton>
+                        <IconButton
+                            size="small"
+                            color="inherit"
+                            onClick={handleToggleVisibility}
+                            aria-label={isHidden ? 'Show widget' : 'Hide widget'}
+                            sx={{
+                                bgcolor: 'rgba(255,255,255,0.15)',
+                                '&:hover': { bgcolor: 'rgba(255,255,255,0.3)' }
+                            }}
+                        >
+                            <CloseIcon fontSize="small" />
+                        </IconButton>
                     </Stack>
                 </Box>
                 <Collapse in={!isMinimized} unmountOnExit>
