@@ -3,6 +3,12 @@
 *.pem
 .DS_Store
 
+# Build artifacts
+dist/
+
+# Dependencies
+node_modules/
+
 # Optional icon files (add if you create them)
 # icon16.png
 # icon48.png

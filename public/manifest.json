@@ -1,0 +1,23 @@
+{
+    "manifest_version": 3,
+    "name": "Regex Highlight & Search",
+    "version": "1.0.0",
+    "description": "Highlight and search text on web pages using regex patterns with navigation controls",
+    "permissions": [
+        "activeTab",
+        "storage"
+    ],
+    "content_scripts": [
+        {
+            "matches": [
+                "<all_urls>"
+            ],
+            "js": [
+                "assets/content.js"
+            ]
+        }
+    ],
+    "action": {
+        "default_popup": "popup.html"
+    }
+}
