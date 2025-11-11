@@ -133,6 +133,7 @@
 }
 
 .regex-search-input-wrapper {
+    color: #fff;
     position: relative;
     width: 100%;
 }
@@ -281,18 +282,20 @@
 }
 
 .regex-collapsible-header {
+    color: #fff;
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 6px;
-    width: 100%;
+    width: 80%;
+    margin: 0 auto;
     padding: 6px 8px;
     border: none;
     background-color: transparent;
     cursor: pointer;
     font-size: 8.4px;
     font-weight: 600;
-    color: #555;
-    text-align: left;
+    text-align: center;
     transition: background-color 0.2s;
     border-radius: 4px;
     user-select: none;
@@ -424,7 +427,7 @@
 .regex-navigation {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: space-around;
     gap: 8px;
     margin-top: 3px;
 }
@@ -700,7 +703,7 @@
 
 .regex-search-buttons-container {
     display: flex;
-    justify-content: space-between;
+    justify-content: space-around;
 }
 
 /* Ripple effect styles */

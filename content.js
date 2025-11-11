@@ -210,7 +210,7 @@ class RegexHighlighter {
             <div>
                 <button class="regex-collapsible-header" id="regex-collapsible-toggle">
               <span class="regex-collapsible-icon">${this.collapsibleExpanded ? '▼' : '▶'}</span>
-              <span class="regex-collapsible-title">Flags & Patterns</span>
+              <span class="regex-collapsible-title" id="regex-collapsible-title">${this.savedPatterns.length > 0 ? 'Flags & Patterns' : 'Flags'}</span>
             </button>
             </div>
             <div class="regex-collapsible-content" id="regex-collapsible-content" style="display: ${this.collapsibleExpanded ? 'block' : 'none'};">
@@ -232,7 +232,7 @@ class RegexHighlighter {
                   <span>s (DotAll)</span>
                 </label>
               </div>
-              <div id="regex-pattern-history" class="regex-pattern-history"></div>
+              <div id="regex-pattern-history" class="regex-pattern-history" style="display: ${this.savedPatterns.length > 0 ? 'block' : 'none'};"></div>
             </div>
           </div>
         </div>
@@ -1726,6 +1726,8 @@ class RegexHighlighter {
             // localStorage may be unavailable (private browsing, etc.)
             console.warn('Could not save pattern to localStorage', e);
         }
+        // Update title and visibility
+        this.updateCollapsibleTitle();
     }
 
     deletePattern(index) {
@@ -1743,9 +1745,25 @@ class RegexHighlighter {
         }
     }
 
+    updateCollapsibleTitle() {
+        const titleElement = document.getElementById('regex-collapsible-title');
+        const historyContainer = document.getElementById('regex-pattern-history');
+
+        if (titleElement) {
+            titleElement.textContent = this.savedPatterns.length > 0 ? 'Flags & Patterns' : 'Flags';
+        }
+
+        if (historyContainer) {
+            historyContainer.style.display = this.savedPatterns.length > 0 ? 'block' : 'none';
+        }
+    }
+
     async renderSavedPatterns() {
         const historyContainer = document.getElementById('regex-pattern-history');
         if (!historyContainer) return;
+
+        // Update title and visibility based on saved patterns
+        this.updateCollapsibleTitle();
 
         if (this.savedPatterns.length === 0) {
             historyContainer.innerHTML = '';
