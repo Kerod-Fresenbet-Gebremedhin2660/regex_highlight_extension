@@ -1,5 +1,32 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+    Box,
+    Button,
+    Chip,
+    Collapse,
+    Divider,
+    FormControlLabel,
+    FormGroup,
+    IconButton,
+    Paper,
+    Stack,
+    Switch,
+    TextField,
+    Tooltip,
+    Typography,
+    Checkbox,
+    ScopedCssBaseline
+} from '@mui/material';
+import { alpha, useTheme } from '@mui/material/styles';
+import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
+import UnfoldLessIcon from '@mui/icons-material/UnfoldLess';
+import UnfoldMoreIcon from '@mui/icons-material/UnfoldMore';
+import CloseIcon from '@mui/icons-material/Close';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import SearchIcon from '@mui/icons-material/Search';
+import ClearIcon from '@mui/icons-material/Clear';
+import {
     RegexHighlighter,
     RegexFlags,
     HighlighterState
@@ -55,6 +82,7 @@ const saveBooleanSetting = (key: string, value: boolean) => {
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
 const ContentApp = () => {
+    const theme = useTheme();
     const highlighterRef = useRef<RegexHighlighter | null>(null);
     const overlayRef = useRef<HTMLDivElement | null>(null);
     const markerContainerRef = useRef<HTMLDivElement | null>(null);
@@ -101,15 +129,27 @@ const ContentApp = () => {
     const hasMatches = highlighterState.matchesTotal > 0;
     const currentDisplayIndex = hasMatches ? highlighterState.currentIndex + 1 : 0;
 
-    const statusIndicatorClass = useMemo(() => {
+    const statusInfo = useMemo(() => {
         if (!highlighterState.searchPattern.trim()) {
-            return 'regex-search-status';
+            return {
+                color: theme.palette.grey[400],
+                shadow: alpha(theme.palette.grey[500], 0.35),
+                title: 'No active search'
+            };
         }
         if (highlighterState.matchesTotal > 0) {
-            return 'regex-search-status regex-search-status-has-matches';
+            return {
+                color: theme.palette.success.main,
+                shadow: alpha(theme.palette.success.main, 0.35),
+                title: `Search active: ${highlighterState.matchesTotal} match${highlighterState.matchesTotal === 1 ? '' : 'es'} found`
+            };
         }
-        return 'regex-search-status regex-search-status-no-matches';
-    }, [highlighterState.matchesTotal, highlighterState.searchPattern]);
+        return {
+            color: theme.palette.error.main,
+            shadow: alpha(theme.palette.error.main, 0.35),
+            title: 'Search active: No matches found'
+        };
+    }, [highlighterState.matchesTotal, highlighterState.searchPattern, theme]);
 
     const matchTypeSummary = useMemo(() => {
         const entries = Object.entries(highlighterState.matchTypeCounts);
@@ -136,13 +176,22 @@ const ContentApp = () => {
     );
 
     const ensureMarkerContainer = useCallback(() => {
-        if (markerContainerRef.current && document.body.contains(markerContainerRef.current)) {
+        const overlay = overlayRef.current;
+        const rootNode = overlay?.getRootNode() ?? document;
+        const parent =
+            rootNode instanceof ShadowRoot ? rootNode : document.body;
+
+        if (
+            markerContainerRef.current &&
+            parent.contains(markerContainerRef.current)
+        ) {
             return markerContainerRef.current;
         }
+
         const container = document.createElement('div');
         container.id = MARKERS_ID;
         container.className = 'regex-scrollbar-markers';
-        document.body.appendChild(container);
+        parent.appendChild(container);
         markerContainerRef.current = container;
         return container;
     }, []);
@@ -179,8 +228,9 @@ const ContentApp = () => {
 
         return () => {
             highlighter.destroy();
-            if (container && document.body.contains(container)) {
-                container.remove();
+            if (markerContainerRef.current?.isConnected) {
+                markerContainerRef.current.remove();
+                markerContainerRef.current = null;
             }
         };
     }, [ensureMarkerContainer, updateOverlayPosition]);
@@ -225,14 +275,6 @@ const ContentApp = () => {
         setSearchInput('');
         inputDirtyRef.current = false;
         setValidationError(null);
-    }, []);
-
-    const handleNext = useCallback(() => {
-        highlighterRef.current?.next();
-    }, []);
-
-    const handlePrevious = useCallback(() => {
-        highlighterRef.current?.previous();
     }, []);
 
     const handleScrollOnSearchChange = useCallback(
@@ -358,14 +400,6 @@ const ContentApp = () => {
                 } else {
                     setIsMinimized(true);
                     saveBooleanSetting(MINIMIZED_SETTING_KEY, true);
-                }
-            }
-            if (event.key === 'F3') {
-                event.preventDefault();
-                if (event.shiftKey) {
-                    highlighterRef.current?.previous();
-                } else {
-                    highlighterRef.current?.next();
                 }
             }
         };
@@ -520,14 +554,6 @@ const ContentApp = () => {
                 case 'clear':
                     void highlighterRef.current?.clear().then(() => sendResponse({ success: true }));
                     return true;
-                case 'next':
-                    highlighterRef.current?.next();
-                    sendResponse({ success: true });
-                    return true;
-                case 'previous':
-                    highlighterRef.current?.previous();
-                    sendResponse({ success: true });
-                    return true;
                 case 'getWidgetState':
                     sendResponse({ success: true, isHidden });
                     return true;
@@ -556,218 +582,263 @@ const ContentApp = () => {
 
     const renderPatternHistory = () => {
         if (!highlighterState.savedPatterns.length) {
-            return null;
+            return (
+                <Typography variant="body2" color="text.secondary">
+                    Saved searches will appear here.
+                </Typography>
+            );
         }
         return (
-            <div id="regex-pattern-history" className="regex-pattern-history" style={{ display: 'block' }}>
+            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                 {highlighterState.savedPatterns.map((pattern, index) => (
-                    <button
+                    <Chip
                         key={`${pattern}-${index}`}
-                        className="regex-pattern-chip"
-                        data-pattern={pattern}
-                        title={`Click to use: ${pattern}`}
-                        onClick={(event) => {
-                            if ((event.target as HTMLElement).classList.contains('regex-pattern-delete')) {
-                                return;
-                            }
-                            handlePatternChipClick(pattern);
-                        }}
-                        type="button"
-                    >
-                        <span className="regex-pattern-text">{pattern}</span>
-                        <span
-                            className="regex-pattern-delete"
-                            data-delete-index={index}
-                            title="Delete pattern"
-                            onClick={(event) => {
-                                event.stopPropagation();
-                                handlePatternDelete(index);
-                            }}
-                        >
-                            ×
-                        </span>
-                    </button>
+                        label={pattern}
+                        size="small"
+                        color="primary"
+                        variant="outlined"
+                        onClick={() => handlePatternChipClick(pattern)}
+                        onDelete={() => handlePatternDelete(index)}
+                    />
                 ))}
-            </div>
+            </Stack>
         );
     };
 
+    const helperText = validationError ? `Invalid regex: ${validationError}` : ' ';
+    const overlayWidth = isMinimized ? 132 : 288;
+    const headerCursor = dragStateRef.current.isDragging ? 'grabbing' : 'grab';
+
     return (
-        <div
-            id={OVERLAY_ID}
-            ref={overlayRef}
-            className={isMinimized ? 'minimized' : ''}
-            style={{
-                top: overlayPosition.top,
-                right: overlayPosition.right,
-                left: 'auto',
-                bottom: 'auto',
-                display: isHidden ? 'none' : 'block'
-            }}
-        >
-            <div className="regex-drag-handle">
-                <span className="regex-drag-icon">⋮⋮</span>
-                <button
-                    id="regex-minimize-btn"
-                    className="regex-minimize-btn"
-                    title={isMinimized ? 'Expand' : 'Minimize'}
-                    onClick={toggleMinimize}
-                    type="button"
+        <ScopedCssBaseline>
+            <Paper
+                id={OVERLAY_ID}
+                ref={overlayRef}
+                className={isMinimized ? 'minimized' : ''}
+                elevation={12}
+                sx={{
+                    position: 'fixed',
+                    top: overlayPosition.top,
+                    right: overlayPosition.right,
+                    left: 'auto',
+                    bottom: 'auto',
+                    display: isHidden ? 'none' : 'flex',
+                    flexDirection: 'column',
+                    width: overlayWidth,
+                    maxHeight: '85vh',
+                    overflow: 'hidden',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    zIndex: 2147483647
+                }}
+            >
+                <Box
+                    className="regex-drag-handle"
+                    sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        px: 1.25,
+                        py: 0.75,
+                        bgcolor: 'primary.main',
+                        color: 'primary.contrastText',
+                        cursor: headerCursor,
+                        userSelect: 'none'
+                    }}
                 >
-                    {isMinimized ? '+' : '−'}
-                </button>
-                <button
-                    className="regex-hide-btn"
-                    title={isHidden ? 'Show widget' : 'Hide widget'}
-                    onClick={handleToggleVisibility}
-                    type="button"
-                >
-                    {isHidden ? '☰' : '×'}
-                </button>
-            </div>
-            <div className="regex-search-container">
-                <div className="regex-search-input-wrapper">
-                    <input
-                        ref={inputRef}
-                        id="regex-search-input"
-                        type="text"
-                        placeholder="Enter regex pattern (e.g., (dog|cat))"
-                        value={searchInput}
-                        onChange={handleInputChange}
-                        onKeyDown={handleInputKeyPress}
-                        className={validationError ? 'regex-input-invalid' : ''}
-                        disabled={isHidden}
-                    />
-                    <span
-                        id="regex-search-status"
-                        className={statusIndicatorClass}
-                        title={
-                            !highlighterState.searchPattern.trim()
-                                ? 'No active search'
-                                : highlighterState.matchesTotal > 0
-                                    ? `Search active: ${highlighterState.matchesTotal} matches found`
-                                    : 'Search active: No matches found'
-                        }
-                    />
-                </div>
-                {validationError ? (
-                    <div id="regex-pattern-error" className="regex-pattern-error">
-                        Invalid regex: {validationError}
-                    </div>
-                ) : null}
-                <div className="regex-search-buttons-container">
-                    <button
-                        id="regex-search-btn"
-                        onClick={() => void handleSearch()}
-                        disabled={!searchInput.trim()}
-                        type="button"
-                    >
-                        Search
-                    </button>
-                    <button
-                        id="regex-clear-btn"
-                        onClick={() => void handleClear()}
-                        disabled={!highlighterState.matchesTotal}
-                        type="button"
-                    >
-                        Clear
-                    </button>
-                </div>
-                <div className="regex-settings">
-                    <label className="regex-setting-toggle">
-                        <input
-                            type="checkbox"
-                            id="regex-scroll-on-search"
-                            checked={highlighterState.scrollOnSearch}
-                            onChange={handleScrollOnSearchChange}
-                        />
-                        <span>Scroll to first match on search</span>
-                    </label>
-                    <div className="regex-collapsible-section">
-                        <div>
-                            <button
-                                className="regex-collapsible-header"
-                                id="regex-collapsible-toggle"
-                                onClick={toggleCollapsible}
-                                type="button"
+                    <Stack direction="row" spacing={1} alignItems="center">
+                        <DragIndicatorIcon fontSize="small" />
+                        {!isMinimized && (
+                            <Typography variant="subtitle2" fontWeight={600}>
+                                Regex Highlight
+                            </Typography>
+                        )}
+                    </Stack>
+                    <Stack direction="row" spacing={1}>
+                        <Tooltip title={isMinimized ? 'Expand' : 'Minimize'}>
+                            <IconButton
+                                size="small"
+                                color="inherit"
+                                onClick={toggleMinimize}
+                                sx={{
+                                    bgcolor: 'rgba(255,255,255,0.15)',
+                                    '&:hover': { bgcolor: 'rgba(255,255,255,0.3)' }
+                                }}
                             >
-                                <span className="regex-collapsible-icon">{collapsibleExpanded ? '▼' : '▶'}</span>
-                                <span className="regex-collapsible-title" id="regex-collapsible-title">
-                                    {highlighterState.savedPatterns.length > 0 ? 'Flags & Patterns' : 'Flags'}
-                                </span>
-                            </button>
-                        </div>
-                        <div
-                            className="regex-collapsible-content"
-                            id="regex-collapsible-content"
-                            style={{ display: collapsibleExpanded ? 'block' : 'none' }}
-                        >
-                            <div className="regex-flags-container">
-                                <label className="regex-flag-label" title="Global: Find all matches (not just first)">
-                                    <input
-                                        type="checkbox"
-                                        id="regex-flag-global"
-                                        checked={highlighterState.regexFlags.global}
-                                        onChange={handleFlagChange('global')}
+                                {isMinimized ? <UnfoldMoreIcon fontSize="small" /> : <UnfoldLessIcon fontSize="small" />}
+                            </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Hide widget">
+                            <IconButton
+                                size="small"
+                                color="inherit"
+                                onClick={handleToggleVisibility}
+                                sx={{
+                                    bgcolor: 'rgba(255,255,255,0.15)',
+                                    '&:hover': { bgcolor: 'rgba(255,255,255,0.3)' }
+                                }}
+                            >
+                                <CloseIcon fontSize="small" />
+                            </IconButton>
+                        </Tooltip>
+                    </Stack>
+                </Box>
+                <Collapse in={!isMinimized} unmountOnExit>
+                    <Box sx={{ p: 2 }}>
+                        <Stack spacing={2}>
+                            <Stack spacing={1}>
+                                <Stack direction="row" spacing={1} alignItems="center">
+                                    <TextField
+                                        fullWidth
+                                        size="small"
+                                        variant="outlined"
+                                        label="Regex pattern"
+                                        placeholder="Enter regex (e.g. (dog|cat))"
+                                        value={searchInput}
+                                        onChange={handleInputChange}
+                                        onKeyDown={handleInputKeyPress}
+                                        inputRef={inputRef}
+                                        disabled={isHidden}
+                                        error={Boolean(validationError)}
+                                        helperText={helperText}
                                     />
-                                    <span>g (Global)</span>
-                                </label>
-                                <label className="regex-flag-label" title="Case-insensitive">
-                                    <input
-                                        type="checkbox"
-                                        id="regex-flag-ignorecase"
-                                        checked={highlighterState.regexFlags.ignoreCase}
-                                        onChange={handleFlagChange('ignoreCase')}
+                                    <Tooltip title={statusInfo.title}>
+                                        <Box
+                                            sx={{
+                                                width: 12,
+                                                height: 12,
+                                                borderRadius: '50%',
+                                                bgcolor: statusInfo.color,
+                                                boxShadow: `0 0 0 4px ${statusInfo.shadow}`
+                                            }}
+                                        />
+                                    </Tooltip>
+                                </Stack>
+                                <Stack direction="row" spacing={1}>
+                                    <Button
+                                        onClick={() => void handleSearch()}
+                                        disabled={!searchInput.trim()}
+                                        startIcon={<SearchIcon fontSize="small" />}
+                                        size="medium"
+                                        sx={{
+                                            flex: 1,
+                                            minWidth: 0,
+                                            height: 38,
+                                            bgcolor: 'primary.main',
+                                            color: 'primary.contrastText',
+                                            '&:hover': { bgcolor: 'primary.light' },
+                                            '&.Mui-disabled': {
+                                                bgcolor: 'rgba(255,255,255,0.12)',
+                                                color: 'text.secondary'
+                                            },
+                                            boxShadow: '0 6px 18px rgba(100,181,246,0.35)'
+                                        }}
+                                    >
+                                        Search
+                                    </Button>
+                                    <Button
+                                        onClick={() => void handleClear()}
+                                        color="secondary"
+                                        startIcon={<ClearIcon fontSize="small" />}
+                                        size="medium"
+                                        sx={{
+                                            flex: 1,
+                                            minWidth: 0,
+                                            height: 38,
+                                            bgcolor: 'secondary.main',
+                                            color: 'common.black',
+                                            '&:hover': { bgcolor: 'secondary.light' },
+                                            '&.Mui-disabled': {
+                                                bgcolor: 'rgba(255,255,255,0.12)',
+                                                color: 'text.secondary'
+                                            },
+                                            boxShadow: '0 6px 18px rgba(255,183,77,0.35)'
+                                        }}
+                                        disabled={!highlighterState.matchesTotal && !highlighterState.searchPattern}
+                                    >
+                                        Clear
+                                    </Button>
+                                </Stack>
+                            </Stack>
+                            <Divider />
+                            <FormControlLabel
+                                control={
+                                    <Switch
+                                        checked={highlighterState.scrollOnSearch}
+                                        onChange={handleScrollOnSearchChange}
                                     />
-                                    <span>i (Ignore Case)</span>
-                                </label>
-                                <label className="regex-flag-label" title="Multiline: ^ and $ match line breaks">
-                                    <input
-                                        type="checkbox"
-                                        id="regex-flag-multiline"
-                                        checked={highlighterState.regexFlags.multiline}
-                                        onChange={handleFlagChange('multiline')}
-                                    />
-                                    <span>m (Multiline)</span>
-                                </label>
-                                <label className="regex-flag-label" title="DotAll: . matches newline">
-                                    <input
-                                        type="checkbox"
-                                        id="regex-flag-dotall"
-                                        checked={highlighterState.regexFlags.dotAll}
-                                        onChange={handleFlagChange('dotAll')}
-                                    />
-                                    <span>s (DotAll)</span>
-                                </label>
-                            </div>
-                            {renderPatternHistory()}
-                        </div>
-                    </div>
-                </div>
-                <div className="regex-navigation">
-                    <button id="regex-prev-btn" onClick={handlePrevious} disabled={!hasMatches} type="button">
-                        ◀ Prev
-                    </button>
-                    <div className="regex-match-counter-container">
-                        <span id="regex-match-counter" title={`Match ${currentDisplayIndex} of ${highlighterState.matchesTotal}`}>
-                            {currentDisplayIndex} / {highlighterState.matchesTotal}
-                        </span>
-                    </div>
-                    <button id="regex-next-btn" onClick={handleNext} disabled={!hasMatches} type="button">
-                        Next ▶
-                    </button>
-                </div>
-                <div>
-                    <span
-                        id="regex-match-type-counts"
-                        className="regex-match-type-counts"
-                        style={{ display: matchTypeSummary ? 'block' : 'none' }}
-                    >
-                        {matchTypeSummary ? `(${matchTypeSummary})` : ''}
-                    </span>
-                </div>
-            </div>
-        </div>
+                                }
+                                label="Scroll to first match on search"
+                            />
+                            <Box>
+                                <Button
+                                    variant="text"
+                                    size="small"
+                                    onClick={toggleCollapsible}
+                                    endIcon={collapsibleExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                                    sx={{ fontWeight: 600 }}
+                                >
+                                    {highlighterState.savedPatterns.length > 0 ? 'Flags & Saved Patterns' : 'Flags'}
+                                </Button>
+                                <Collapse in={collapsibleExpanded}>
+                                    <Stack spacing={1} sx={{ mt: 1 }}>
+                                        <FormGroup row>
+                                            <FormControlLabel
+                                                control={
+                                                    <Checkbox
+                                                        checked={highlighterState.regexFlags.global}
+                                                        onChange={handleFlagChange('global')}
+                                                    />
+                                                }
+                                                label="g (Global)"
+                                            />
+                                            <FormControlLabel
+                                                control={
+                                                    <Checkbox
+                                                        checked={highlighterState.regexFlags.ignoreCase}
+                                                        onChange={handleFlagChange('ignoreCase')}
+                                                    />
+                                                }
+                                                label="i (Ignore Case)"
+                                            />
+                                            <FormControlLabel
+                                                control={
+                                                    <Checkbox
+                                                        checked={highlighterState.regexFlags.multiline}
+                                                        onChange={handleFlagChange('multiline')}
+                                                    />
+                                                }
+                                                label="m (Multiline)"
+                                            />
+                                            <FormControlLabel
+                                                control={
+                                                    <Checkbox
+                                                        checked={highlighterState.regexFlags.dotAll}
+                                                        onChange={handleFlagChange('dotAll')}
+                                                    />
+                                                }
+                                                label="s (DotAll)"
+                                            />
+                                        </FormGroup>
+                                        {renderPatternHistory()}
+                                    </Stack>
+                                </Collapse>
+                            </Box>
+                            <Divider />
+                            <Box textAlign="center">
+                                <Typography variant="body1" fontWeight={600}>
+                                    {currentDisplayIndex} / {highlighterState.matchesTotal}
+                                </Typography>
+                                {matchTypeSummary ? (
+                                    <Typography variant="caption" color="text.secondary">
+                                        ({matchTypeSummary})
+                                    </Typography>
+                                ) : null}
+                            </Box>
+                        </Stack>
+                    </Box>
+                </Collapse>
+            </Paper>
+        </ScopedCssBaseline>
     );
 };
 

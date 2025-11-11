@@ -820,6 +820,17 @@ export class RegexHighlighter {
         }
         const container = this.markerContainer;
         container.innerHTML = '';
+        container.style.position = 'fixed';
+        container.style.pointerEvents = 'none';
+        container.style.display = 'flex';
+        container.style.flexDirection = 'column';
+        container.style.justifyContent = 'flex-start';
+        container.style.right = '16px';
+        container.style.top = '12px';
+        container.style.bottom = '12px';
+        container.style.width = '12px';
+        container.style.padding = '10px 2px';
+        container.style.zIndex = '2147483646';
         const documentHeight = Math.max(
             document.body.scrollHeight,
             document.body.offsetHeight,
@@ -843,17 +854,28 @@ export class RegexHighlighter {
             const positionPercent = (elementTop / documentHeight) * 100;
             const markerTop = (positionPercent / 100) * scrollbarTrackHeight;
             const marker = document.createElement('div');
-            let markerClass = 'regex-scrollbar-marker';
-            if (match.matchType !== null && this.matchTypes.length > 1) {
-                markerClass += ` regex-scrollbar-marker-type-${match.matchType}`;
-            }
-            marker.className = markerClass;
             marker.dataset.matchIndex = String(index);
-            if (index === this.currentIndex) {
-                marker.classList.add('active');
-            }
+            marker.style.pointerEvents = 'auto';
+            marker.style.position = 'absolute';
+            marker.style.left = '50%';
+            marker.style.transform = 'translate(-50%, -50%)';
+            marker.style.width = '6px';
+            marker.style.height = '6px';
+            marker.style.borderRadius = '999px';
+            marker.style.cursor = 'pointer';
+            marker.style.transition = 'transform 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease';
+            marker.style.boxShadow = '0 1px 2px rgba(0, 0, 0, 0.18)';
+            marker.style.backgroundColor =
+                match.matchType !== null && this.matchTypes.length > 1
+                    ? this.getMarkerColor(match.matchType)
+                    : '#fff59d';
             marker.style.top = `${markerTop}px`;
             marker.title = this.getMatchContext(match, 50);
+            if (index === this.currentIndex) {
+                marker.style.transform = 'translate(-50%, -50%) scale(1.35)';
+                marker.style.backgroundColor = '#ff9800';
+                marker.style.boxShadow = '0 0 0 4px rgba(255, 152, 0, 0.35), 0 2px 4px rgba(0, 0, 0, 0.25)';
+            }
             marker.addEventListener('click', () => {
                 this.currentIndex = index;
                 this.scrollToMatch(index);
@@ -861,6 +883,20 @@ export class RegexHighlighter {
             });
             container.appendChild(marker);
         });
+    }
+
+    private getMarkerColor(typeIndex: number) {
+        const colors = [
+            '#fdd835',
+            '#7cb342',
+            '#42a5f5',
+            '#ec407a',
+            '#ab47bc',
+            '#ffa726',
+            '#26a69a',
+            '#8d6e63'
+        ];
+        return colors[typeIndex % colors.length];
     }
 
     clearScrollbarMarkers() {

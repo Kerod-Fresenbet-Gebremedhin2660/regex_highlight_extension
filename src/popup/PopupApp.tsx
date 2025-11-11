@@ -1,4 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+    Alert,
+    Box,
+    Button,
+    CircularProgress,
+    Divider,
+    Paper,
+    Stack,
+    Typography
+} from '@mui/material';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import RegexIcon from '@mui/icons-material/AutoFixHigh';
+import KeyboardIcon from '@mui/icons-material/Keyboard';
 
 type WidgetStateResponse = {
     success: boolean;
@@ -39,12 +52,18 @@ const PopupApp = () => {
     const [statusText, setStatusText] = useState<string>('');
     const [error, setError] = useState<string | null>(null);
 
-    const statusClass = useMemo(() => {
-        if (isHidden === null) {
-            return 'status';
+    const statusMessage = useMemo(() => {
+        if (error) {
+            return { severity: 'error' as const, text: error };
         }
-        return `status ${isHidden ? 'hidden' : 'visible'}`;
-    }, [isHidden]);
+        if (statusText) {
+            return {
+                severity: isHidden ? ('warning' as const) : ('success' as const),
+                text: statusText
+            };
+        }
+        return { severity: 'info' as const, text: 'Widget status unknown' };
+    }, [error, isHidden, statusText]);
 
     const refreshState = useCallback(async () => {
         setIsLoading(true);
@@ -125,59 +144,85 @@ const PopupApp = () => {
         }
     }, [refreshState]);
 
-    const renderStatus = () => {
-        if (error) {
-            return (
-                <div className="status error" role="alert">
-                    {error}
-                </div>
-            );
-        }
-
-        if (statusText) {
-            return (
-                <div className={statusClass}>
-                    {statusText}
-                </div>
-            );
-        }
-
-        return (
-            <div className="status neutral">
-                Widget status unknown
-            </div>
-        );
-    };
+    const isToggleDisabled = isHidden === null || isLoading;
 
     return (
-        <div className="popup-root">
-            <h3>🔍 Regex Highlight &amp; Search</h3>
-            <p>
-                The search UI appears on each page. Use it to:
-            </p>
-            <ul>
-                <li>Enter regex patterns</li>
-                <li>Highlight all matches</li>
-                <li>Navigate with Previous/Next</li>
-            </ul>
-            <button
-                className="toggle-button"
+        <Paper
+            elevation={6}
+            sx={{
+                p: 2,
+                width: 320,
+                maxWidth: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 2
+            }}
+        >
+            <Stack direction="row" spacing={1.5} alignItems="center">
+                <RegexIcon color="primary" />
+                <Typography variant="h6" fontWeight={700}>
+                    Regex Highlight &amp; Search
+                </Typography>
+            </Stack>
+            <Typography variant="body2" color="text.secondary">
+                The widget appears on every page so you can:
+            </Typography>
+            <Stack spacing={0.75}>
+                <Stack direction="row" spacing={1} alignItems="center">
+                    <ChevronRightIcon fontSize="small" color="primary" />
+                    <Typography variant="body2">Enter regex patterns with live validation</Typography>
+                </Stack>
+                <Stack direction="row" spacing={1} alignItems="center">
+                    <ChevronRightIcon fontSize="small" color="primary" />
+                    <Typography variant="body2">Highlight every match and jump between them</Typography>
+                </Stack>
+                <Stack direction="row" spacing={1} alignItems="center">
+                    <ChevronRightIcon fontSize="small" color="primary" />
+                    <Typography variant="body2">Save your favourite searches for quick reuse</Typography>
+                </Stack>
+            </Stack>
+            <Button
                 onClick={handleToggle}
-                disabled={isLoading || isHidden === null}
-                type="button"
+                disabled={isToggleDisabled}
+                endIcon={
+                    isLoading ? (
+                        <CircularProgress size={16} color="inherit" />
+                    ) : (
+                        <ChevronRightIcon fontSize="small" />
+                    )
+                }
             >
                 {isHidden ? 'Show Widget' : 'Hide Widget'}
-            </button>
-            {renderStatus()}
-            <div className="shortcut">
-                <strong>Keyboard Shortcuts:</strong>
-                <div className="shortcut-item">
-                    Ctrl/Cmd + Shift + F: Toggle widget (minimize if open, expand &amp; focus if minimized)
-                </div>
-                <div className="shortcut-item">F3: Next match</div>
-                <div className="shortcut-item">Shift + F3: Previous match</div>
-            </div>
-        </div>
+            </Button>
+            <Alert severity={statusMessage.severity} variant="outlined">
+                {statusMessage.text}
+            </Alert>
+            <Divider />
+            <Stack spacing={1}>
+                <Stack direction="row" spacing={1} alignItems="center">
+                    <KeyboardIcon color="primary" />
+                    <Typography variant="subtitle2" fontWeight={600}>
+                        Keyboard Shortcuts
+                    </Typography>
+                </Stack>
+                <Box>
+                    <Typography variant="body2" color="text.secondary">
+                        Ctrl/Cmd + Shift + F
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                        Toggle the widget (expand if minimized, minimize if open)
+                    </Typography>
+                </Box>
+                <Box>
+                    <Typography variant="body2" color="text.secondary">
+                        F3 / Shift + F3
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                        Jump to the next or previous match
+                    </Typography>
+                </Box>
+            </Stack>
+        </Paper>
     );
 };
 

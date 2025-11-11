@@ -1,7 +1,8 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { CssBaseline, ThemeProvider } from '@mui/material';
 import PopupApp from './PopupApp';
-import './popup.css';
+import theme from '../theme';
 
 const rootElement = document.getElementById('root');
 
@@ -13,7 +14,10 @@ const root = createRoot(rootElement);
 
 root.render(
     <StrictMode>
-        <PopupApp />
+        <ThemeProvider theme={theme}>
+            <CssBaseline />
+            <PopupApp />
+        </ThemeProvider>
     </StrictMode>
 );
 

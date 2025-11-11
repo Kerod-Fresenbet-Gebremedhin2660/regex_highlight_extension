@@ -1,756 +1,117 @@
-/* Regex Highlight UI Overlay */
-#regex-highlight-ui {
-    position: fixed;
-    top: 10px;
-    right: 36px;
-    /* Same separation from marker bar (marker bar at right: 20px, width: 12px) */
-    z-index: 999999;
-    background: rgba(255, 255, 255, 1);
-    border: 2px solid #4a90e2;
-    border-radius: 8px;
-    padding: 10px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-    font-size: 9.1px;
-    transition: all 0.3s ease;
-    user-select: none;
-    will-change: transform;
-    max-width: calc(100vw - 20px);
-    max-height: calc(100vh - 20px);
-    overflow: hidden;
-    transform-origin: top right;
+#regex-highlight-extension-root {
+    font-family: 'Roboto', 'Helvetica', 'Arial', sans-serif;
 }
 
-#regex-highlight-ui:not(.minimized) {
-    width: 180px;
-}
-
-.regex-drag-handle {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 28px;
-    cursor: grab;
-    z-index: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 4px;
-    border-bottom: 1px solid #e0e0e0;
-}
-
-.regex-drag-handle:active {
-    cursor: grabbing;
-}
-
-.regex-drag-icon {
-    color: #808080;
-    font-size: 9.8px;
-    letter-spacing: -2px;
-    line-height: 1;
-    user-select: none;
-    opacity: 0.6;
-    transition: opacity 0.2s;
-}
-
-.regex-drag-handle:hover .regex-drag-icon {
-    opacity: 1;
-}
-
-#regex-highlight-ui.minimized .regex-drag-icon {
-    display: none;
-}
-
-#regex-highlight-ui.minimized {
-    padding: 4px;
-    min-width: auto;
-    left: auto !important;
-    right: 36px !important;
-    /* Position to the left of scrollbar markers (which are at right: 20px, width: 12px) */
-}
-
-#regex-highlight-ui.minimized .regex-search-container {
-    display: none;
-}
-
-#regex-highlight-ui .regex-hide-btn {
-    margin-left: 8px;
-    background: transparent;
-    border: none;
-    color: inherit;
-    font-size: 16px;
-    cursor: pointer;
-    padding: 0 4px;
-}
-
-#regex-highlight-ui .regex-hide-btn:hover {
-    color: #666;
-}
-
-.regex-minimize-btn {
-    position: absolute;
-    top: 4px;
-    right: 4px;
-    width: 20px;
-    height: 20px;
-    padding: 0 !important;
-    margin: 0 !important;
-    border: none !important;
-    border-radius: 3px !important;
-    background-color: #808080 !important;
-    color: #000000 !important;
-    font-size: 11.2px !important;
-    font-weight: bold !important;
-    line-height: 1 !important;
-    cursor: pointer !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    transition: background-color 0.2s !important;
-    z-index: 2;
-    overflow: hidden !important;
-}
-
-.regex-minimize-btn:hover {
-    background-color: #a0a0a0 !important;
-}
-
-#regex-highlight-ui.minimized .regex-minimize-btn {
-    position: relative;
-    top: 0;
-    right: 0;
-    margin: 0;
-}
-
-#regex-highlight-ui.minimized .regex-drag-handle {
-    height: auto;
-    position: relative;
-    border-bottom: none;
-    padding: 0;
-}
-
-.regex-search-container {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    position: relative;
-    margin-top: 28px;
-    margin-left: -10px;
-    margin-right: -10px;
-    padding-left: 10px;
-    padding-right: 10px;
-    overflow-y: auto;
-    overflow-x: hidden;
-    max-height: calc(100vh - 60px);
-    width: calc(100% + 20px);
-    box-sizing: border-box;
-}
-
-.regex-search-input-wrapper {
-    color: #fff;
-    position: relative;
-    width: 100%;
-}
-
-#regex-search-input {
-    padding: 6px 10px;
-    padding-right: 28px;
-    /* Make room for status indicator */
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    font-size: 9.1px;
-    width: 100%;
-    box-sizing: border-box;
-}
-
-.regex-search-status {
-    position: absolute;
-    right: 8px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    display: none;
-    pointer-events: none;
-    transition: background-color 0.2s ease;
-}
-
-.regex-search-status.regex-search-status-has-matches {
-    display: block;
-    background-color: #4caf50;
-    /* Green */
-    box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.3);
-}
-
-.regex-search-status.regex-search-status-no-matches {
-    display: block;
-    background-color: #f44336;
-    /* Red */
-    box-shadow: 0 0 0 2px rgba(244, 67, 54, 0.3);
-}
-
-#regex-search-input:focus {
-    outline: none;
-    border-color: #4a90e2;
-    box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.2);
-}
-
-#regex-search-input.regex-input-invalid {
-    border-color: #ff4444 !important;
-    background-color: #fff5f5 !important;
-}
-
-#regex-search-input.regex-input-invalid:focus {
-    border-color: #ff4444 !important;
-    box-shadow: 0 0 0 2px rgba(255, 68, 68, 0.2) !important;
-}
-
-.regex-pattern-error {
-    color: #ff4444;
-    font-size: 11px;
-    margin-top: 4px;
-    padding: 4px 6px;
-    background-color: #fff5f5;
-    border-radius: 3px;
-    border-left: 3px solid #ff4444;
-}
-
-.regex-search-container button {
-    padding: 6px 12px !important;
-    border: none !important;
-    border-radius: 4px !important;
-    cursor: pointer !important;
-    font-size: 9.1px !important;
-    font-weight: 500 !important;
-    transition: background-color 0.2s !important;
-    background-color: #808080 !important;
-    color: #000000 !important;
-    position: relative !important;
-    overflow: hidden !important;
-}
-
-#regex-search-btn {
-    background-color: #808080 !important;
-    color: #000000 !important;
-}
-
-#regex-search-btn:hover:not(:disabled) {
-    background-color: #a0a0a0 !important;
-}
-
-#regex-search-btn:disabled {
-    background-color: #bdc3c7 !important;
-    color: #000000 !important;
-    cursor: not-allowed !important;
-    opacity: 0.6 !important;
-}
-
-#regex-clear-btn {
-    background-color: #808080 !important;
-    color: #000000 !important;
-}
-
-#regex-clear-btn:hover:not(:disabled) {
-    background-color: #a0a0a0 !important;
-}
-
-#regex-clear-btn:disabled {
-    background-color: #bdc3c7 !important;
-    color: #000000 !important;
-    cursor: not-allowed !important;
-    opacity: 0.6 !important;
-}
-
-.regex-settings {
-    margin-top: 8px;
-    padding-top: 8px;
-    border-top: 1px solid #e0e0e0;
-}
-
-.regex-setting-toggle {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 7.7px;
-    color: #555;
-    cursor: pointer;
-    user-select: none;
-}
-
-.regex-setting-toggle input[type="checkbox"] {
-    cursor: pointer;
-    margin: 0;
-    width: 14px;
-    height: 14px;
-}
-
-.regex-setting-toggle span {
-    flex: 1;
-}
-
-.regex-collapsible-section {
-    margin-top: 8px;
-    padding-top: 8px;
-    border-top: 1px solid #e0e0e0;
-}
-
-.regex-collapsible-header {
-    color: #fff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    width: 80%;
-    margin: 0 auto;
-    padding: 6px 8px;
-    border: none;
-    background-color: transparent;
-    cursor: pointer;
-    font-size: 8.4px;
-    font-weight: 600;
-    text-align: center;
-    transition: background-color 0.2s;
-    border-radius: 4px;
-    user-select: none;
-}
-
-.regex-collapsible-header:hover {
-    background-color: #f0f0f0;
-}
-
-.regex-collapsible-icon {
-    font-size: 9px;
-    line-height: 1;
-    transition: transform 0.2s;
-    color: #808080;
-}
-
-.regex-collapsible-title {
-    flex: 1;
-}
-
-.regex-collapsible-content {
-    margin-top: 8px;
-    padding-top: 8px;
-    border-top: 1px solid #e0e0e0;
-}
-
-.regex-flags-container {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 8px;
-}
-
-.regex-flag-label {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 7.7px;
-    color: #555;
-    cursor: pointer;
-    user-select: none;
-    white-space: nowrap;
-}
-
-.regex-flag-label input[type="checkbox"] {
-    cursor: pointer;
-    margin: 0;
-    width: 14px;
-    height: 14px;
-}
-
-.regex-flag-label span {
-    font-family: 'Courier New', monospace;
-    font-weight: 600;
-}
-
-.regex-pattern-history {
-    display: flex;
-    height: 60px;
-    flex-direction: column;
-    flex-wrap: nowrap;
-    gap: 4px;
-    margin-top: 0;
-    max-height: 60px;
-    overflow-y: scroll;
-    overflow-x: hidden;
-    border: 2px solid #4a90e2;
-    border-radius: 8px;
-    padding: 2px;
-    width: 100%;
-    box-sizing: border-box;
-}
-
-.regex-pattern-chip {
-    padding: 3px 6px 3px 8px;
-    border: 1px solid #ccc;
-    border-radius: 12px;
-    background-color: #f0f0f0;
-    color: #333;
-    font-size: 7.7px;
-    cursor: pointer;
-    white-space: nowrap;
-    max-width: 100%;
-    min-height: 20px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    transition: background-color 0.2s;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    flex-shrink: 0;
-    box-sizing: border-box;
-}
-
-.regex-pattern-chip:hover {
-    background-color: #e0e0e0;
-    border-color: #808080;
-}
-
-.regex-pattern-text {
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    min-width: 0;
-}
-
-.regex-pattern-delete {
-    flex-shrink: 0;
-    width: 16px;
-    height: 16px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-    background-color: transparent;
-    color: #666;
-    font-size: 11.2px;
-    line-height: 1;
-    cursor: pointer;
-    transition: all 0.2s;
-    font-weight: bold;
-}
-
-.regex-pattern-delete:hover {
-    background-color: #ff4444;
-    color: #fff;
-}
-
-.regex-navigation {
-    display: flex;
-    align-items: center;
-    justify-content: space-around;
-    gap: 8px;
-    margin-top: 3px;
-}
-
-.regex-match-counter-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    min-width: 50px;
-    max-width: 200px;
-}
-
-#regex-prev-btn,
-#regex-next-btn {
-    background-color: #808080 !important;
-    color: #000000 !important;
-    padding: 5px 10px !important;
-    font-size: 8.4px !important;
-    position: relative !important;
-    overflow: hidden !important;
-}
-
-#regex-prev-btn:hover:not(:disabled),
-#regex-next-btn:hover:not(:disabled) {
-    background-color: #a0a0a0 !important;
-}
-
-#regex-prev-btn:disabled,
-#regex-next-btn:disabled {
-    background-color: #bdc3c7 !important;
-    color: #000000 !important;
-    cursor: not-allowed !important;
-    opacity: 0.6 !important;
-}
-
-#regex-match-counter {
-    font-size: 12px;
-    font-weight: 600;
-    color: #555;
-    text-align: center;
-    cursor: help;
-    white-space: nowrap;
-    line-height: 1.2;
-}
-
-.regex-match-type-counts {
-    font-size: 9px;
-    font-weight: 400;
-    color: #888;
-    text-align: center;
-    cursor: help;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 100%;
-    line-height: 1.2;
-    margin-top: 2px;
-    display: none;
-}
-
-/* Highlight styles */
 .regex-highlight-match {
-    background-color: #ffeb3b !important;
+    background-color: #fff59d !important;
     color: #000 !important;
     padding: 2px 0;
     border-radius: 2px;
-    font-weight: 500;
-}
-
-/* Type-specific base colors (when not focused) - using colors appropriate for reading */
-.regex-highlight-type-0 {
-    background-color: #fdd835 !important;
-    /* Yellow */
-    color: #000 !important;
-}
-
-.regex-highlight-type-1 {
-    background-color: #81c784 !important;
-    /* Green */
-    color: #000 !important;
-}
-
-.regex-highlight-type-2 {
-    background-color: #64b5f6 !important;
-    /* Blue */
-    color: #000 !important;
-}
-
-.regex-highlight-type-3 {
-    background-color: #f48fb1 !important;
-    /* Pink */
-    color: #000 !important;
-}
-
-.regex-highlight-type-4 {
-    background-color: #ba68c8 !important;
-    /* Purple */
-    color: #000 !important;
-}
-
-.regex-highlight-type-5 {
-    background-color: #ffb74d !important;
-    /* Orange */
-    color: #000 !important;
-}
-
-.regex-highlight-type-6 {
-    background-color: #4db6ac !important;
-    /* Teal */
-    color: #000 !important;
-}
-
-.regex-highlight-type-7 {
-    background-color: #a1887f !important;
-    /* Beige/brown */
-    color: #000 !important;
+    transition: background-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .regex-highlight-active {
-    background-color: #ff9800 !important;
-    color: #000 !important;
-    box-shadow: 0 0 0 2px rgba(255, 152, 0, 0.5);
-    outline: 2px solid #ff9800;
+    background-color: #ffb74d !important;
+    box-shadow: 0 0 0 2px rgba(255, 183, 77, 0.45);
+    outline: 2px solid #fb8c00;
     outline-offset: 1px;
 }
 
-/* Active state overrides type colors */
-.regex-highlight-active.regex-highlight-type-0,
-.regex-highlight-active.regex-highlight-type-1,
-.regex-highlight-active.regex-highlight-type-2,
-.regex-highlight-active.regex-highlight-type-3,
-.regex-highlight-active.regex-highlight-type-4,
-.regex-highlight-active.regex-highlight-type-5,
-.regex-highlight-active.regex-highlight-type-6,
-.regex-highlight-active.regex-highlight-type-7 {
-    background-color: #ff9800 !important;
-    /* Orange for active, regardless of type */
+.regex-highlight-type-0 {
+    background-color: #ffecb3 !important;
 }
 
-/* Scrollbar markers */
+.regex-highlight-type-1 {
+    background-color: #c5e1a5 !important;
+}
+
+.regex-highlight-type-2 {
+    background-color: #bbdefb !important;
+}
+
+.regex-highlight-type-3 {
+    background-color: #f8bbd0 !important;
+}
+
+.regex-highlight-type-4 {
+    background-color: #d1c4e9 !important;
+}
+
+.regex-highlight-type-5 {
+    background-color: #ffe0b2 !important;
+}
+
+.regex-highlight-type-6 {
+    background-color: #b2dfdb !important;
+}
+
+.regex-highlight-type-7 {
+    background-color: #d7ccc8 !important;
+}
+
 .regex-scrollbar-markers {
     position: fixed;
-    right: 20px;
-    top: 10px;
-    bottom: 10px;
-    width: 12px;
-    z-index: 999998;
+    right: 16px;
+    top: 12px;
+    bottom: 12px;
+    width: 10px;
+    z-index: 2147483646;
     pointer-events: none;
-    padding: 10px 2px;
-    box-sizing: border-box;
-    transform-origin: top right;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
 }
 
 .regex-scrollbar-marker {
-    position: absolute;
-    right: 0;
-    width: 6px;
-    height: 5px;
-    background-color: #ffeb3b;
-    border: none;
-    border-radius: 2px;
-    cursor: pointer;
     pointer-events: auto;
-    transform: translateY(-50%);
-    transition: all 0.2s ease;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-}
-
-/* Type-specific marker colors - using darker colors for visibility */
-.regex-scrollbar-marker-type-0 {
-    background-color: #f9a825 !important;
-    /* Darker yellow */
-}
-
-.regex-scrollbar-marker-type-1 {
-    background-color: #66bb6a !important;
-    /* Darker green */
-}
-
-.regex-scrollbar-marker-type-2 {
-    background-color: #42a5f5 !important;
-    /* Darker blue */
-}
-
-.regex-scrollbar-marker-type-3 {
-    background-color: #ec407a !important;
-    /* Darker pink */
-}
-
-.regex-scrollbar-marker-type-4 {
-    background-color: #ab47bc !important;
-    /* Darker purple */
-}
-
-.regex-scrollbar-marker-type-5 {
-    background-color: #ffa726 !important;
-    /* Darker orange */
-}
-
-.regex-scrollbar-marker-type-6 {
-    background-color: #26a69a !important;
-    /* Darker teal */
-}
-
-.regex-scrollbar-marker-type-7 {
-    background-color: #8d6e63 !important;
-    /* Darker beige/brown */
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background-color: #fff59d;
+    margin: 4px 0;
+    cursor: pointer;
+    transition: transform 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
 }
 
 .regex-scrollbar-marker:hover {
-    width: 6px;
-    height: 7px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-}
-
-/* Hover states for type-specific markers */
-.regex-scrollbar-marker-type-0:hover {
-    background-color: #f57f17 !important;
-}
-
-.regex-scrollbar-marker-type-1:hover {
-    background-color: #4caf50 !important;
-}
-
-.regex-scrollbar-marker-type-2:hover {
-    background-color: #2196f3 !important;
-}
-
-.regex-scrollbar-marker-type-3:hover {
-    background-color: #e91e63 !important;
-}
-
-.regex-scrollbar-marker-type-4:hover {
-    background-color: #9c27b0 !important;
-}
-
-.regex-scrollbar-marker-type-5:hover {
-    background-color: #ff9800 !important;
-}
-
-.regex-scrollbar-marker-type-6:hover {
-    background-color: #009688 !important;
-}
-
-.regex-scrollbar-marker-type-7:hover {
-    background-color: #6d4c41 !important;
+    transform: scale(1.2);
 }
 
 .regex-scrollbar-marker.active {
-    width: 6px;
-    height: 7px;
+    transform: scale(1.35);
     background-color: #ff9800;
-    box-shadow: 0 0 4px rgba(255, 152, 0, 0.6), 0 2px 4px rgba(0, 0, 0, 0.3);
-    z-index: 1;
+    box-shadow: 0 0 0 4px rgba(255, 152, 0, 0.35), 0 2px 4px rgba(0, 0, 0, 0.25);
 }
 
-/* Active state overrides type colors for markers */
-.regex-scrollbar-marker.active.regex-scrollbar-marker-type-0,
-.regex-scrollbar-marker.active.regex-scrollbar-marker-type-1,
-.regex-scrollbar-marker.active.regex-scrollbar-marker-type-2,
-.regex-scrollbar-marker.active.regex-scrollbar-marker-type-3,
-.regex-scrollbar-marker.active.regex-scrollbar-marker-type-4,
-.regex-scrollbar-marker.active.regex-scrollbar-marker-type-5,
-.regex-scrollbar-marker.active.regex-scrollbar-marker-type-6,
-.regex-scrollbar-marker.active.regex-scrollbar-marker-type-7 {
-    background-color: #ff9800 !important;
-    /* Orange for active, regardless of type */
+.regex-scrollbar-marker-type-0 {
+    background-color: #fdd835;
 }
 
-/* Hide markers when widget is minimized if desired */
-#regex-highlight-ui.minimized~.regex-scrollbar-markers {
-    display: block;
+.regex-scrollbar-marker-type-1 {
+    background-color: #7cb342;
 }
 
-.regex-search-buttons-container {
-    display: flex;
-    justify-content: space-around;
+.regex-scrollbar-marker-type-2 {
+    background-color: #42a5f5;
 }
 
-/* Ripple effect styles */
-.regex-ripple {
-    position: absolute;
-    border-radius: 50%;
-    transform: scale(0);
-    animation: regex-ripple-animation 600ms ease-out;
-    background-color: rgba(0, 0, 0, 0.5);
-    pointer-events: none;
-    width: 100px;
-    height: 100px;
-    margin-left: -50px;
-    margin-top: -50px;
+.regex-scrollbar-marker-type-3 {
+    background-color: #ec407a;
 }
 
-@keyframes regex-ripple-animation {
-    to {
-        transform: scale(4);
-        opacity: 0;
-    }
+.regex-scrollbar-marker-type-4 {
+    background-color: #ab47bc;
 }
 
-/* Ensure collapsible header buttons also support ripple */
-.regex-collapsible-header {
-    position: relative;
-    overflow: hidden;
+.regex-scrollbar-marker-type-5 {
+    background-color: #ffa726;
 }
 
-/* Ensure pattern chips support ripple */
-.regex-pattern-chip {
-    position: relative;
-    overflow: hidden;
+.regex-scrollbar-marker-type-6 {
+    background-color: #26a69a;
+}
+
+.regex-scrollbar-marker-type-7 {
+    background-color: #8d6e63;
 }
