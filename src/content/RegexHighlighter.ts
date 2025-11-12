@@ -72,6 +72,7 @@ export class RegexHighlighter {
     private sortTimeoutId: ReturnType<typeof setTimeout> | null = null;
     private overlayElement: HTMLElement | null = null;
     private markerContainer: HTMLElement | null = null;
+    private navigationCleanup?: () => void;
 
     constructor(callbacks: CallbackEvents = {}) {
         this.callbacks = callbacks;
@@ -116,6 +117,9 @@ export class RegexHighlighter {
         }
         if (this.sortTimeoutId) {
             clearTimeout(this.sortTimeoutId);
+        }
+        if (this.navigationCleanup) {
+            this.navigationCleanup();
         }
     }
 
@@ -1084,18 +1088,41 @@ export class RegexHighlighter {
 
     private setupNavigationListener() {
         let lastUrl = location.href;
+        let lastPathname = location.pathname;
+        let lastSearch = location.search;
+        let lastHash = location.hash;
         let navigationTimeout: ReturnType<typeof setTimeout> | null = null;
+        let domChangeTimeout: ReturnType<typeof setTimeout> | null = null;
+        let urlPollInterval: ReturnType<typeof setInterval> | null = null;
+        let mutationObserver: MutationObserver | null = null;
 
         const checkNavigation = () => {
             const currentUrl = location.href;
+            const currentPathname = location.pathname;
+            const currentSearch = location.search;
+            const currentHash = location.hash;
             const currentDomain = this.getDomain();
-            if (currentUrl === lastUrl) {
+
+            // Check if URL actually changed
+            const urlChanged =
+                currentUrl !== lastUrl ||
+                currentPathname !== lastPathname ||
+                currentSearch !== lastSearch ||
+                currentHash !== lastHash;
+
+            if (!urlChanged) {
                 return;
             }
+
             lastUrl = currentUrl;
+            lastPathname = currentPathname;
+            lastSearch = currentSearch;
+            lastHash = currentHash;
+
             if (navigationTimeout) {
                 clearTimeout(navigationTimeout);
             }
+
             chrome.storage.local.get(SEARCH_STATE_KEY, (result) => {
                 const state = result[SEARCH_STATE_KEY] as
                     | {
@@ -1125,9 +1152,81 @@ export class RegexHighlighter {
             });
         };
 
+        // Handle DOM changes that might indicate SPA navigation
+        const handleDOMChange = () => {
+            if (domChangeTimeout) {
+                clearTimeout(domChangeTimeout);
+            }
+            // Debounce DOM changes - only trigger if URL also changed
+            domChangeTimeout = setTimeout(() => {
+                const currentUrl = location.href;
+                if (currentUrl !== lastUrl) {
+                    checkNavigation();
+                }
+            }, 500);
+        };
+
+        // Set up MutationObserver to watch for significant DOM changes
+        mutationObserver = new MutationObserver((mutations) => {
+            let shouldCheck = false;
+            for (const mutation of mutations) {
+                // Check for significant changes that might indicate SPA navigation
+                if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+                    // Check if a significant portion of the page changed
+                    for (const node of Array.from(mutation.addedNodes)) {
+                        if (node.nodeType === Node.ELEMENT_NODE) {
+                            const element = node as HTMLElement;
+                            // Check for common SPA container elements
+                            if (
+                                element.tagName === 'MAIN' ||
+                                element.tagName === 'ARTICLE' ||
+                                element.tagName === 'SECTION' ||
+                                element.id?.includes('app') ||
+                                element.id?.includes('root') ||
+                                element.id?.includes('content') ||
+                                element.classList.contains('router-view') ||
+                                element.classList.contains('page-content')
+                            ) {
+                                shouldCheck = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (shouldCheck) break;
+            }
+            if (shouldCheck) {
+                handleDOMChange();
+            }
+        });
+
+        // Start observing the document body for changes
+        if (document.body) {
+            mutationObserver.observe(document.body, {
+                childList: true,
+                subtree: true
+            });
+        } else {
+            // If body doesn't exist yet, wait for it
+            const bodyObserver = new MutationObserver(() => {
+                if (document.body && mutationObserver) {
+                    mutationObserver.observe(document.body, {
+                        childList: true,
+                        subtree: true
+                    });
+                    bodyObserver.disconnect();
+                }
+            });
+            bodyObserver.observe(document.documentElement, {
+                childList: true
+            });
+        }
+
+        // Listen to standard navigation events
         window.addEventListener('popstate', checkNavigation);
         window.addEventListener('hashchange', checkNavigation);
 
+        // Intercept history API calls
         const originalPushState = history.pushState;
         const originalReplaceState = history.replaceState;
         history.pushState = function pushState(...args) {
@@ -1137,6 +1236,34 @@ export class RegexHighlighter {
         history.replaceState = function replaceState(...args) {
             originalReplaceState.apply(history, args);
             setTimeout(checkNavigation, 0);
+        };
+
+        // Fallback: Poll URL changes as a last resort (for SPAs that don't use standard APIs)
+        urlPollInterval = setInterval(() => {
+            const currentUrl = location.href;
+            if (currentUrl !== lastUrl) {
+                checkNavigation();
+            }
+        }, 1000);
+
+        // Cleanup function (called in destroy)
+        this.navigationCleanup = () => {
+            if (navigationTimeout) {
+                clearTimeout(navigationTimeout);
+            }
+            if (domChangeTimeout) {
+                clearTimeout(domChangeTimeout);
+            }
+            if (urlPollInterval) {
+                clearInterval(urlPollInterval);
+            }
+            if (mutationObserver) {
+                mutationObserver.disconnect();
+            }
+            window.removeEventListener('popstate', checkNavigation);
+            window.removeEventListener('hashchange', checkNavigation);
+            history.pushState = originalPushState;
+            history.replaceState = originalReplaceState;
         };
     }
 
