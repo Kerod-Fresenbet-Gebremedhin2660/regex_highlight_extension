@@ -371,6 +371,7 @@ const ContentApp = () => {
         });
     }, []);
 
+
     const handlePatternChipClick = useCallback((pattern: string) => {
         setSearchInput(pattern);
         inputDirtyRef.current = false;
@@ -556,9 +557,9 @@ const ContentApp = () => {
 
     useEffect(() => {
         const messageHandler = (
-            message: { action: string; pattern?: string },
+            message: { action: string; pattern?: string; matchIndex?: number },
             _sender: chrome.runtime.MessageSender,
-            sendResponse: (response: { success: boolean; isHidden?: boolean }) => void
+            sendResponse: (response: any) => void
         ) => {
             switch (message.action) {
                 case 'search':
@@ -593,6 +594,30 @@ const ContentApp = () => {
                     saveBooleanSetting(HIDDEN_SETTING_KEY, false);
                     sendResponse({ success: true });
                     return true;
+                case 'getMatchPreviews':
+                    if (highlighterRef.current) {
+                        const previews = highlighterRef.current.getAllMatchPreviews(40);
+                        sendResponse({
+                            success: true,
+                            previews,
+                            state: {
+                                matchesTotal: highlighterState.matchesTotal,
+                                currentIndex: highlighterState.currentIndex,
+                                searchPattern: highlighterState.searchPattern
+                            }
+                        });
+                    } else {
+                        sendResponse({ success: false, previews: [], state: null });
+                    }
+                    return true;
+                case 'jumpToMatch':
+                    if (typeof message.matchIndex === 'number' && highlighterRef.current) {
+                        highlighterRef.current.jumpToMatch(message.matchIndex);
+                        sendResponse({ success: true });
+                    } else {
+                        sendResponse({ success: false });
+                    }
+                    return true;
                 default:
                     break;
             }
@@ -604,7 +629,7 @@ const ContentApp = () => {
         return () => {
             chrome.runtime.onMessage.removeListener(messageHandler);
         };
-    }, [isHidden]);
+    }, [isHidden, highlighterState]);
 
     const renderPatternHistory = () => {
         if (!highlighterState.savedPatterns.length) {
@@ -653,7 +678,7 @@ const ContentApp = () => {
                     width: overlayWidth,
                     maxHeight: '85vh',
                     overflow: 'hidden',
-                    border: '1px solid rgba(255,255,255,0.08)',
+                    border: '1px solid rgba(0,0,0,0.08)',
                     zIndex: 2147483647
                 }}
             >
@@ -756,7 +781,7 @@ const ContentApp = () => {
                                             color: 'primary.contrastText',
                                             '&:hover': { bgcolor: 'primary.light' },
                                             '&.Mui-disabled': {
-                                                bgcolor: 'rgba(255,255,255,0.12)',
+                                                bgcolor: 'rgba(0,0,0,0.06)',
                                                 color: 'text.secondary'
                                             },
                                             boxShadow: '0 6px 18px rgba(100,181,246,0.35)'
@@ -777,7 +802,7 @@ const ContentApp = () => {
                                             color: 'common.black',
                                             '&:hover': { bgcolor: 'secondary.light' },
                                             '&.Mui-disabled': {
-                                                bgcolor: 'rgba(255,255,255,0.12)',
+                                                bgcolor: 'rgba(0,0,0,0.06)',
                                                 color: 'text.secondary'
                                             },
                                             boxShadow: '0 6px 18px rgba(255,183,77,0.35)'

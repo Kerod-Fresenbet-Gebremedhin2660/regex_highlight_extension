@@ -251,8 +251,99 @@ export class RegexHighlighter {
         });
     }
 
+    jumpToMatch(index: number) {
+        if (index < 0 || index >= this.matches.length) {
+            return;
+        }
+        this.currentIndex = index;
+        this.highlightActiveMatch(index);
+        this.scrollToMatch(index);
+        this.updateScrollbarMarkers();
+        this.notifyStateChange();
+    }
+
     getMatches(): MatchEntry[] {
         return this.matches;
+    }
+
+    getMatchPreview(matchIndex: number, contextLength = 50): {
+        before: string;
+        match: string;
+        after: string;
+        fullText: string;
+    } | null {
+        if (matchIndex < 0 || matchIndex >= this.matches.length) {
+            return null;
+        }
+        const match = this.matches[matchIndex];
+        if (!match.span) {
+            return null;
+        }
+        const matchText = match.span.textContent ?? '';
+        const parent = match.span.parentElement;
+        if (!parent) {
+            return { before: '', match: matchText, after: '', fullText: matchText };
+        }
+        let fullText = '';
+        let matchPosition = -1;
+        let currentPos = 0;
+        parent.childNodes.forEach((child) => {
+            if (child === match.span) {
+                matchPosition = currentPos;
+                fullText += matchText;
+                currentPos += matchText.length;
+            } else if (child.nodeType === Node.TEXT_NODE) {
+                const text = child.textContent ?? '';
+                fullText += text;
+                currentPos += text.length;
+            } else if (child.nodeType === Node.ELEMENT_NODE) {
+                const text = (child as HTMLElement).textContent ?? '';
+                fullText += text;
+                currentPos += text.length;
+            }
+        });
+        if (matchPosition === -1) {
+            fullText = parent.textContent ?? '';
+            matchPosition = fullText.indexOf(matchText);
+        }
+        if (matchPosition === -1) {
+            return { before: '', match: matchText, after: '', fullText: matchText };
+        }
+        const beforeStart = Math.max(0, matchPosition - contextLength);
+        const afterEnd = Math.min(fullText.length, matchPosition + matchText.length + contextLength);
+        const before = fullText.substring(beforeStart, matchPosition);
+        const after = fullText.substring(matchPosition + matchText.length, afterEnd);
+        return {
+            before: beforeStart > 0 ? `...${before}` : before,
+            match: matchText,
+            after: afterEnd < fullText.length ? `${after}...` : after,
+            fullText: fullText.substring(beforeStart, afterEnd)
+        };
+    }
+
+    getAllMatchPreviews(contextLength = 50): Array<{
+        index: number;
+        before: string;
+        match: string;
+        after: string;
+        fullText: string;
+    }> {
+        return this.matches.map((_, index) => {
+            const preview = this.getMatchPreview(index, contextLength);
+            if (!preview) {
+                return {
+                    index,
+                    before: '',
+                    match: '',
+                    after: '',
+                    fullText: ''
+                };
+            }
+            return {
+                index,
+                ...preview
+            };
+        });
     }
 
     saveOverlayPosition(position: { top: number; right: number }) {
