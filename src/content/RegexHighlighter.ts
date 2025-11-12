@@ -55,7 +55,6 @@ export class RegexHighlighter {
     private maxSavedPatterns = 8;
     private worker: Worker | null = null;
     private workerPendingRequests = new Map<number, PendingRequest>();
-    private refreshTimeout: number | null = null;
     private isPerformingSearch = false;
     private isScrollingProgrammatically = false;
     private scrollHandler?: () => void;
@@ -73,7 +72,6 @@ export class RegexHighlighter {
     private sortTimeoutId: ReturnType<typeof setTimeout> | null = null;
     private overlayElement: HTMLElement | null = null;
     private markerContainer: HTMLElement | null = null;
-    private domObserver: MutationObserver | null = null;
 
     constructor(callbacks: CallbackEvents = {}) {
         this.callbacks = callbacks;
@@ -118,14 +116,6 @@ export class RegexHighlighter {
         }
         if (this.sortTimeoutId) {
             clearTimeout(this.sortTimeoutId);
-        }
-        if (this.domObserver) {
-            this.domObserver.disconnect();
-            this.domObserver = null;
-        }
-        if (this.refreshTimeout !== null) {
-            clearTimeout(this.refreshTimeout);
-            this.refreshTimeout = null;
         }
     }
 
@@ -190,12 +180,6 @@ export class RegexHighlighter {
 
         this.isPerformingSearch = true;
 
-        // Disconnect observer during search operations to prevent loop
-        const wasObserving = this.domObserver !== null;
-        if (this.domObserver) {
-            this.domObserver.disconnect();
-        }
-
         try {
             await this.clearHighlights();
             await this.findMatches();
@@ -213,41 +197,17 @@ export class RegexHighlighter {
             this.updateScrollbarMarkers();
         } finally {
             this.isPerformingSearch = false;
-
-            // Reconnect observer after search operations
-            if (wasObserving && this.domObserver && document.body) {
-                this.domObserver.observe(document.body, { childList: true, subtree: true });
-            }
         }
     }
 
     async clear() {
-        // Clear any pending refresh timeout
-        if (this.refreshTimeout !== null) {
-            clearTimeout(this.refreshTimeout);
-            this.refreshTimeout = null;
-        }
-
-        // Disconnect observer during clear operations to prevent loop
-        const wasObserving = this.domObserver !== null;
-        if (this.domObserver) {
-            this.domObserver.disconnect();
-        }
-
-        try {
-            await this.clearHighlights();
-            this.searchPattern = '';
-            this.currentIndex = -1;
-            this.matchTypes = [];
-            this.clearSearchState();
-            this.notifyStateChange();
-            this.clearScrollbarMarkers();
-        } finally {
-            // Reconnect observer after clear operations
-            if (wasObserving && this.domObserver && document.body) {
-                this.domObserver.observe(document.body, { childList: true, subtree: true });
-            }
-        }
+        await this.clearHighlights();
+        this.searchPattern = '';
+        this.currentIndex = -1;
+        this.matchTypes = [];
+        this.clearSearchState();
+        this.notifyStateChange();
+        this.clearScrollbarMarkers();
     }
 
     next() {
@@ -767,12 +727,6 @@ export class RegexHighlighter {
         }
         this.isPerformingSearch = true;
 
-        // Disconnect observer during search operations to prevent loop
-        const wasObserving = this.domObserver !== null;
-        if (this.domObserver) {
-            this.domObserver.disconnect();
-        }
-
         try {
             await this.clearHighlights();
             await this.findMatches();
@@ -788,11 +742,6 @@ export class RegexHighlighter {
             console.warn('Could not refresh regex highlights:', error);
         } finally {
             this.isPerformingSearch = false;
-
-            // Reconnect observer after search operations
-            if (wasObserving && this.domObserver && document.body) {
-                this.domObserver.observe(document.body, { childList: true, subtree: true });
-            }
         }
     }
 
@@ -1189,128 +1138,6 @@ export class RegexHighlighter {
             originalReplaceState.apply(history, args);
             setTimeout(checkNavigation, 0);
         };
-
-        const scheduleRefresh = () => {
-            if (!this.searchPattern.trim() || this.isPerformingSearch) {
-                return;
-            }
-            if (this.refreshTimeout !== null) {
-                return;
-            }
-            this.refreshTimeout = window.setTimeout(async () => {
-                this.refreshTimeout = null;
-                await this.rerunActiveSearch();
-            }, 300);
-        };
-
-        const setupObserver = () => {
-            if (this.domObserver) {
-                this.domObserver.disconnect();
-            }
-            this.domObserver = new MutationObserver((mutations) => {
-                let shouldCheck = false;
-                const overlayElement = this.overlayElement;
-                const markerContainer = this.markerContainer;
-
-                for (const mutation of mutations) {
-                    const target = mutation.target as Node;
-
-                    // Skip if mutation target is in our overlay or marker container
-                    if (overlayElement && overlayElement.contains(target)) {
-                        continue;
-                    }
-                    if (markerContainer && markerContainer.contains(target)) {
-                        continue;
-                    }
-
-                    // Skip if mutation target is a highlight element or inside a highlight
-                    const targetElement =
-                        target.nodeType === Node.ELEMENT_NODE
-                            ? (target as HTMLElement)
-                            : target.parentElement;
-                    if (targetElement) {
-                        if (
-                            targetElement.classList.contains(HIGHLIGHT_CLASS) ||
-                            targetElement.closest(`.${HIGHLIGHT_CLASS}`)
-                        ) {
-                            continue;
-                        }
-                    }
-
-                    if (mutation.addedNodes.length > 0) {
-                        for (const node of Array.from(mutation.addedNodes)) {
-                            // Skip text nodes that are part of highlights
-                            if (node.nodeType === Node.TEXT_NODE) {
-                                const parent = node.parentElement;
-                                if (parent && (
-                                    parent.classList.contains(HIGHLIGHT_CLASS) ||
-                                    parent.closest(`.${HIGHLIGHT_CLASS}`) ||
-                                    (overlayElement && overlayElement.contains(parent)) ||
-                                    (markerContainer && markerContainer.contains(parent))
-                                )) {
-                                    continue;
-                                }
-                            }
-
-                            const element =
-                                node.nodeType === Node.ELEMENT_NODE
-                                    ? (node as HTMLElement)
-                                    : node.parentElement;
-
-                            if (!element) {
-                                continue;
-                            }
-
-                            // Check if this is a highlight element itself
-                            if (element.classList.contains(HIGHLIGHT_CLASS)) {
-                                continue;
-                            }
-
-                            // Check if element is inside a highlight
-                            if (element.closest(`.${HIGHLIGHT_CLASS}`)) {
-                                continue;
-                            }
-
-                            // Check if element contains highlights (being added to highlight context)
-                            if (element.querySelector && element.querySelector(`.${HIGHLIGHT_CLASS}`)) {
-                                continue;
-                            }
-
-                            // Check if element is in our overlay or marker container
-                            if (
-                                (overlayElement && overlayElement.contains(element)) ||
-                                (markerContainer && markerContainer.contains(element))
-                            ) {
-                                continue;
-                            }
-
-                            shouldCheck = true;
-                            break;
-                        }
-                    }
-                    if (shouldCheck) {
-                        break;
-                    }
-                }
-                if (shouldCheck) {
-                    scheduleRefresh();
-                }
-            });
-            if (document.body) {
-                this.domObserver.observe(document.body, { childList: true, subtree: true });
-            }
-        };
-        if (document.body) {
-            setupObserver();
-        } else {
-            const bodyObserver = new MutationObserver(() => {
-                if (document.body) {
-                    setupObserver();
-                    bodyObserver.disconnect();
-                }
-            });
-            bodyObserver.observe(document.documentElement, { childList: true });
-        }
     }
 
     private getCurrentZoomScale() {

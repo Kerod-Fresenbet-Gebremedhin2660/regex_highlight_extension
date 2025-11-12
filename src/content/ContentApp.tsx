@@ -159,7 +159,7 @@ const ContentApp = () => {
         return entries.map(([name, count]) => `${name}: ${count}`).join(', ');
     }, [highlighterState.matchTypeCounts]);
 
-    const showMiniChip = isHidden || isMinimized;
+    const showMiniChip = (isHidden || isMinimized) && highlighterState.searchPattern.trim();
     const chipLabel = highlighterState.searchPattern.trim()
         ? highlighterState.matchesTotal > 0
             ? `${currentDisplayIndex}/${highlighterState.matchesTotal}`
@@ -724,15 +724,15 @@ const ContentApp = () => {
                                         error={Boolean(validationError)}
                                         helperText={helperText}
                                     />
-                                        <Box
-                                            sx={{
-                                                width: 12,
-                                                height: 12,
-                                                borderRadius: '50%',
-                                                bgcolor: statusInfo.color,
-                                                boxShadow: `0 0 0 4px ${statusInfo.shadow}`
-                                            }}
-                                        />
+                                    <Box
+                                        sx={{
+                                            width: 12,
+                                            height: 12,
+                                            borderRadius: '50%',
+                                            bgcolor: statusInfo.color,
+                                            boxShadow: `0 0 0 4px ${statusInfo.shadow}`
+                                        }}
+                                    />
                                 </Stack>
                                 <Stack direction="row" spacing={1}>
                                     <Button
