@@ -55,6 +55,8 @@ export class RegexHighlighter {
     private maxSavedPatterns = 8;
     private worker: Worker | null = null;
     private workerPendingRequests = new Map<number, PendingRequest>();
+    private refreshTimeout: number | null = null;
+    private isPerformingSearch = false;
     private isScrollingProgrammatically = false;
     private scrollHandler?: () => void;
     private scrollTimeout?: number;
@@ -71,6 +73,7 @@ export class RegexHighlighter {
     private sortTimeoutId: ReturnType<typeof setTimeout> | null = null;
     private overlayElement: HTMLElement | null = null;
     private markerContainer: HTMLElement | null = null;
+    private domObserver: MutationObserver | null = null;
 
     constructor(callbacks: CallbackEvents = {}) {
         this.callbacks = callbacks;
@@ -115,6 +118,14 @@ export class RegexHighlighter {
         }
         if (this.sortTimeoutId) {
             clearTimeout(this.sortTimeoutId);
+        }
+        if (this.domObserver) {
+            this.domObserver.disconnect();
+            this.domObserver = null;
+        }
+        if (this.refreshTimeout !== null) {
+            clearTimeout(this.refreshTimeout);
+            this.refreshTimeout = null;
         }
     }
 
@@ -177,30 +188,66 @@ export class RegexHighlighter {
         this.savePattern(pattern);
         this.saveSearchState(pattern);
 
-        await this.clearHighlights();
-        await this.findMatches();
-        await this.highlightMatches();
+        this.isPerformingSearch = true;
 
-        this.currentIndex = this.matches.length > 0 ? 0 : -1;
-        this.notifyStateChange();
-
-        if (this.currentIndex >= 0 && this.scrollOnSearch) {
-            this.scrollToMatch(this.currentIndex);
+        // Disconnect observer during search operations to prevent loop
+        const wasObserving = this.domObserver !== null;
+        if (this.domObserver) {
+            this.domObserver.disconnect();
         }
 
-        this.setupScrollTracking();
-        this.scheduleSortPatternsByMatchCount();
-        this.updateScrollbarMarkers();
+        try {
+            await this.clearHighlights();
+            await this.findMatches();
+            await this.highlightMatches();
+
+            this.currentIndex = this.matches.length > 0 ? 0 : -1;
+            this.notifyStateChange();
+
+            if (this.currentIndex >= 0 && this.scrollOnSearch) {
+                this.scrollToMatch(this.currentIndex);
+            }
+
+            this.setupScrollTracking();
+            this.scheduleSortPatternsByMatchCount();
+            this.updateScrollbarMarkers();
+        } finally {
+            this.isPerformingSearch = false;
+
+            // Reconnect observer after search operations
+            if (wasObserving && this.domObserver && document.body) {
+                this.domObserver.observe(document.body, { childList: true, subtree: true });
+            }
+        }
     }
 
     async clear() {
-        await this.clearHighlights();
-        this.searchPattern = '';
-        this.currentIndex = -1;
-        this.matchTypes = [];
-        this.clearSearchState();
-        this.notifyStateChange();
-        this.clearScrollbarMarkers();
+        // Clear any pending refresh timeout
+        if (this.refreshTimeout !== null) {
+            clearTimeout(this.refreshTimeout);
+            this.refreshTimeout = null;
+        }
+
+        // Disconnect observer during clear operations to prevent loop
+        const wasObserving = this.domObserver !== null;
+        if (this.domObserver) {
+            this.domObserver.disconnect();
+        }
+
+        try {
+            await this.clearHighlights();
+            this.searchPattern = '';
+            this.currentIndex = -1;
+            this.matchTypes = [];
+            this.clearSearchState();
+            this.notifyStateChange();
+            this.clearScrollbarMarkers();
+        } finally {
+            // Reconnect observer after clear operations
+            if (wasObserving && this.domObserver && document.body) {
+                this.domObserver.observe(document.body, { childList: true, subtree: true });
+            }
+        }
     }
 
     next() {
@@ -711,6 +758,44 @@ export class RegexHighlighter {
         this.callbacks.onMatchesUpdated?.(this.matches);
     }
 
+    private async rerunActiveSearch() {
+        if (!this.searchPattern.trim()) {
+            return;
+        }
+        if (this.isPerformingSearch) {
+            return;
+        }
+        this.isPerformingSearch = true;
+
+        // Disconnect observer during search operations to prevent loop
+        const wasObserving = this.domObserver !== null;
+        if (this.domObserver) {
+            this.domObserver.disconnect();
+        }
+
+        try {
+            await this.clearHighlights();
+            await this.findMatches();
+            await this.highlightMatches();
+            this.currentIndex = this.matches.length > 0 ? 0 : -1;
+            if (this.currentIndex >= 0 && this.scrollOnSearch) {
+                this.scrollToMatch(this.currentIndex);
+            }
+            this.setupScrollTracking();
+            this.updateScrollbarMarkers();
+            this.notifyStateChange();
+        } catch (error) {
+            console.warn('Could not refresh regex highlights:', error);
+        } finally {
+            this.isPerformingSearch = false;
+
+            // Reconnect observer after search operations
+            if (wasObserving && this.domObserver && document.body) {
+                this.domObserver.observe(document.body, { childList: true, subtree: true });
+            }
+        }
+    }
+
     private scrollToMatch(index: number) {
         if (index < 0 || index >= this.matches.length) {
             return;
@@ -1086,19 +1171,8 @@ export class RegexHighlighter {
                         this.regexFlags = { ...this.regexFlags, ...state.flags };
                     }
                     this.notifyStateChange();
-                    void (async () => {
-                        await this.clearHighlights();
-                        await this.findMatches();
-                        await this.highlightMatches();
-                        this.currentIndex = this.matches.length > 0 ? 0 : -1;
-                        if (this.currentIndex >= 0 && this.scrollOnSearch) {
-                            this.scrollToMatch(this.currentIndex);
-                        }
-                        this.setupScrollTracking();
-                        this.updateScrollbarMarkers();
-                        this.notifyStateChange();
-                    })();
-                }, 500);
+                    void this.rerunActiveSearch();
+                }, 300);
             });
         };
 
@@ -1116,23 +1190,102 @@ export class RegexHighlighter {
             setTimeout(checkNavigation, 0);
         };
 
-        let domObserver: MutationObserver | null = null;
-        const setupObserver = () => {
-            if (domObserver) {
-                domObserver.disconnect();
+        const scheduleRefresh = () => {
+            if (!this.searchPattern.trim() || this.isPerformingSearch) {
+                return;
             }
-            domObserver = new MutationObserver((mutations) => {
+            if (this.refreshTimeout !== null) {
+                return;
+            }
+            this.refreshTimeout = window.setTimeout(async () => {
+                this.refreshTimeout = null;
+                await this.rerunActiveSearch();
+            }, 300);
+        };
+
+        const setupObserver = () => {
+            if (this.domObserver) {
+                this.domObserver.disconnect();
+            }
+            this.domObserver = new MutationObserver((mutations) => {
                 let shouldCheck = false;
+                const overlayElement = this.overlayElement;
+                const markerContainer = this.markerContainer;
+
                 for (const mutation of mutations) {
+                    const target = mutation.target as Node;
+
+                    // Skip if mutation target is in our overlay or marker container
+                    if (overlayElement && overlayElement.contains(target)) {
+                        continue;
+                    }
+                    if (markerContainer && markerContainer.contains(target)) {
+                        continue;
+                    }
+
+                    // Skip if mutation target is a highlight element or inside a highlight
+                    const targetElement =
+                        target.nodeType === Node.ELEMENT_NODE
+                            ? (target as HTMLElement)
+                            : target.parentElement;
+                    if (targetElement) {
+                        if (
+                            targetElement.classList.contains(HIGHLIGHT_CLASS) ||
+                            targetElement.closest(`.${HIGHLIGHT_CLASS}`)
+                        ) {
+                            continue;
+                        }
+                    }
+
                     if (mutation.addedNodes.length > 0) {
                         for (const node of Array.from(mutation.addedNodes)) {
-                            if (node.nodeType === Node.ELEMENT_NODE) {
-                                const tagName = (node as HTMLElement).tagName.toLowerCase();
-                                if (!['script', 'style', 'link', 'meta', 'noscript'].includes(tagName)) {
-                                    shouldCheck = true;
-                                    break;
+                            // Skip text nodes that are part of highlights
+                            if (node.nodeType === Node.TEXT_NODE) {
+                                const parent = node.parentElement;
+                                if (parent && (
+                                    parent.classList.contains(HIGHLIGHT_CLASS) ||
+                                    parent.closest(`.${HIGHLIGHT_CLASS}`) ||
+                                    (overlayElement && overlayElement.contains(parent)) ||
+                                    (markerContainer && markerContainer.contains(parent))
+                                )) {
+                                    continue;
                                 }
                             }
+
+                            const element =
+                                node.nodeType === Node.ELEMENT_NODE
+                                    ? (node as HTMLElement)
+                                    : node.parentElement;
+
+                            if (!element) {
+                                continue;
+                            }
+
+                            // Check if this is a highlight element itself
+                            if (element.classList.contains(HIGHLIGHT_CLASS)) {
+                                continue;
+                            }
+
+                            // Check if element is inside a highlight
+                            if (element.closest(`.${HIGHLIGHT_CLASS}`)) {
+                                continue;
+                            }
+
+                            // Check if element contains highlights (being added to highlight context)
+                            if (element.querySelector && element.querySelector(`.${HIGHLIGHT_CLASS}`)) {
+                                continue;
+                            }
+
+                            // Check if element is in our overlay or marker container
+                            if (
+                                (overlayElement && overlayElement.contains(element)) ||
+                                (markerContainer && markerContainer.contains(element))
+                            ) {
+                                continue;
+                            }
+
+                            shouldCheck = true;
+                            break;
                         }
                     }
                     if (shouldCheck) {
@@ -1140,14 +1293,11 @@ export class RegexHighlighter {
                     }
                 }
                 if (shouldCheck) {
-                    if (navigationTimeout) {
-                        clearTimeout(navigationTimeout);
-                    }
-                    navigationTimeout = setTimeout(checkNavigation, 300);
+                    scheduleRefresh();
                 }
             });
             if (document.body) {
-                domObserver.observe(document.body, { childList: true, subtree: true });
+                this.domObserver.observe(document.body, { childList: true, subtree: true });
             }
         };
         if (document.body) {

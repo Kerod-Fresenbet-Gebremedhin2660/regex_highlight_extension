@@ -724,7 +724,6 @@ const ContentApp = () => {
                                         error={Boolean(validationError)}
                                         helperText={helperText}
                                     />
-                                    <Tooltip title={statusInfo.title}>
                                         <Box
                                             sx={{
                                                 width: 12,
@@ -734,7 +733,6 @@ const ContentApp = () => {
                                                 boxShadow: `0 0 0 4px ${statusInfo.shadow}`
                                             }}
                                         />
-                                    </Tooltip>
                                 </Stack>
                                 <Stack direction="row" spacing={1}>
                                     <Button
