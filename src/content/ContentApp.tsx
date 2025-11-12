@@ -8,6 +8,7 @@ import {
     FormControlLabel,
     FormGroup,
     IconButton,
+    InputAdornment,
     Paper,
     Stack,
     Switch,
@@ -709,31 +710,38 @@ const ContentApp = () => {
                     <Box sx={{ p: 2 }}>
                         <Stack spacing={2}>
                             <Stack spacing={1}>
-                                <Stack direction="row" spacing={1} alignItems="center">
-                                    <TextField
-                                        fullWidth
-                                        size="small"
-                                        variant="outlined"
-                                        label="Regex pattern"
-                                        placeholder="Enter regex (e.g. (dog|cat))"
-                                        value={searchInput}
-                                        onChange={handleInputChange}
-                                        onKeyDown={handleInputKeyPress}
-                                        inputRef={inputRef}
-                                        disabled={isHidden}
-                                        error={Boolean(validationError)}
-                                        helperText={helperText}
-                                    />
-                                    <Box
-                                        sx={{
-                                            width: 12,
-                                            height: 12,
-                                            borderRadius: '50%',
-                                            bgcolor: statusInfo.color,
-                                            boxShadow: `0 0 0 4px ${statusInfo.shadow}`
-                                        }}
-                                    />
-                                </Stack>
+                                <TextField
+                                    fullWidth
+                                    size="small"
+                                    variant="outlined"
+                                    label="Regex pattern"
+                                    placeholder="Enter regex (e.g. (dog|cat))"
+                                    value={searchInput}
+                                    onChange={handleInputChange}
+                                    onKeyDown={handleInputKeyPress}
+                                    inputRef={inputRef}
+                                    disabled={isHidden}
+                                    error={Boolean(validationError)}
+                                    helperText={helperText}
+                                    InputProps={{
+                                        endAdornment: (
+                                            <InputAdornment position="end">
+                                                <Tooltip title={statusInfo.title} arrow>
+                                                    <Box
+                                                        sx={{
+                                                            width: 12,
+                                                            height: 12,
+                                                            borderRadius: '50%',
+                                                            bgcolor: statusInfo.color,
+                                                            boxShadow: `0 0 0 4px ${statusInfo.shadow}`,
+                                                            cursor: 'help'
+                                                        }}
+                                                    />
+                                                </Tooltip>
+                                            </InputAdornment>
+                                        )
+                                    }}
+                                />
                                 <Stack direction="row" spacing={1}>
                                     <Button
                                         onClick={() => void handleSearch()}
