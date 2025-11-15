@@ -133,31 +133,18 @@ const ContentApp = () => {
     const [manualScaleSteps, setManualScaleSteps] = useState(0);
     const manualScaleFactor = useMemo(() => 1 + manualScaleSteps * 0.1, [manualScaleSteps]);
     const [computedScale, setComputedScale] = useState(1);
-    const getZoomScale = useCallback(() => {
-        const viewport = window.visualViewport;
-        if (viewport?.scale && viewport.scale !== 1) {
-            return viewport.scale;
+    const getZoomLevel = useCallback(() => {
+        if (window.devicePixelRatio) {
+            return window.devicePixelRatio;
         }
-
-        const derivedFromOuterWidth =
-            window.outerWidth && window.innerWidth ? window.outerWidth / window.innerWidth : null;
-        if (derivedFromOuterWidth && Number.isFinite(derivedFromOuterWidth) && derivedFromOuterWidth > 0) {
-            return derivedFromOuterWidth;
+        const screenObj = window.screen as typeof window.screen & {
+            deviceXDPI?: number;
+            logicalXDPI?: number;
+        };
+        if (screenObj.deviceXDPI && screenObj.logicalXDPI && screenObj.logicalXDPI > 0) {
+            return screenObj.deviceXDPI / screenObj.logicalXDPI;
         }
-
-        const docElement = document.documentElement;
-        if (docElement?.clientWidth && window.innerWidth) {
-            const derivedFromClientWidth = docElement.clientWidth / window.innerWidth;
-            if (
-                derivedFromClientWidth &&
-                Number.isFinite(derivedFromClientWidth) &&
-                derivedFromClientWidth > 0
-            ) {
-                return derivedFromClientWidth;
-            }
-        }
-
-        return window.devicePixelRatio || 1;
+        return 1;
     }, []);
 
     const currentDisplayIndex = hasMatches ? highlighterState.currentIndex + 1 : 0;
@@ -296,8 +283,8 @@ const ContentApp = () => {
 
     useEffect(() => {
         const updateComputedScale = () => {
-            const zoomScale = getZoomScale();
-            const totalScale = manualScaleFactor / zoomScale;
+            const zoomLevel = getZoomLevel();
+            const totalScale = manualScaleFactor / zoomLevel;
             setComputedScale((prev) => {
                 if (Math.abs(prev - totalScale) > 0.0001) {
                     return totalScale;
@@ -317,7 +304,7 @@ const ContentApp = () => {
             viewport?.removeEventListener('resize', updateComputedScale);
             viewport?.removeEventListener('scroll', updateComputedScale);
         };
-    }, [getZoomScale, manualScaleFactor]);
+    }, [getZoomLevel, manualScaleFactor]);
 
     useEffect(() => {
         highlighterRef.current?.setManualScaleFactor(manualScaleFactor);

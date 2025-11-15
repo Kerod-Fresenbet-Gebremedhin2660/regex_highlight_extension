@@ -64,7 +64,6 @@ export class RegexHighlighter {
     private scrollOnSearch: boolean;
     private regexFlags: RegexFlags;
     private useZoomFallback = false;
-    private baseDevicePixelRatio: number;
     private zoomHandlingSetup = false;
     private currentUIScale = 1;
     private manualScaleFactor = 1;
@@ -85,7 +84,6 @@ export class RegexHighlighter {
             multiline: this.loadSetting('regexFlagMultiline', false),
             dotAll: this.loadSetting('regexFlagDotAll', false)
         };
-        this.baseDevicePixelRatio = window.devicePixelRatio || 1;
         this.initWorker();
         this.setupZoomHandling();
         this.setupNavigationListener();
@@ -1360,16 +1358,17 @@ export class RegexHighlighter {
     }
 
     private getCurrentZoomScale() {
-        if (window.visualViewport && typeof window.visualViewport.scale === 'number') {
-            const viewportScale = window.visualViewport.scale;
-            return viewportScale && viewportScale > 0 ? viewportScale : 1;
+        if (window.devicePixelRatio) {
+            return window.devicePixelRatio;
         }
-        const baseRatio = this.baseDevicePixelRatio || 1;
-        const currentRatio = window.devicePixelRatio || baseRatio;
-        if (baseRatio <= 0) {
-            return 1;
+        const screenObj = window.screen as typeof window.screen & {
+            deviceXDPI?: number;
+            logicalXDPI?: number;
+        };
+        if (screenObj.deviceXDPI && screenObj.logicalXDPI && screenObj.logicalXDPI > 0) {
+            return screenObj.deviceXDPI / screenObj.logicalXDPI;
         }
-        return currentRatio / baseRatio;
+        return 1;
     }
 
     private setupZoomHandling() {
