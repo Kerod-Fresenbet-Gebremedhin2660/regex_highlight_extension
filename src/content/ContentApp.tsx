@@ -12,6 +12,7 @@ import {
     IconButton,
     InputAdornment,
     Paper,
+    Slider,
     Stack,
     Switch,
     TextField,
@@ -129,6 +130,36 @@ const ContentApp = () => {
         return fallback;
     });
     const hasMatches = highlighterState.matchesTotal > 0;
+    const [manualScaleSteps, setManualScaleSteps] = useState(0);
+    const manualScaleFactor = useMemo(() => 1 + manualScaleSteps * 0.1, [manualScaleSteps]);
+    const [computedScale, setComputedScale] = useState(1);
+    const getZoomScale = useCallback(() => {
+        const viewport = window.visualViewport;
+        if (viewport?.scale && viewport.scale !== 1) {
+            return viewport.scale;
+        }
+
+        const derivedFromOuterWidth =
+            window.outerWidth && window.innerWidth ? window.outerWidth / window.innerWidth : null;
+        if (derivedFromOuterWidth && Number.isFinite(derivedFromOuterWidth) && derivedFromOuterWidth > 0) {
+            return derivedFromOuterWidth;
+        }
+
+        const docElement = document.documentElement;
+        if (docElement?.clientWidth && window.innerWidth) {
+            const derivedFromClientWidth = docElement.clientWidth / window.innerWidth;
+            if (
+                derivedFromClientWidth &&
+                Number.isFinite(derivedFromClientWidth) &&
+                derivedFromClientWidth > 0
+            ) {
+                return derivedFromClientWidth;
+            }
+        }
+
+        return window.devicePixelRatio || 1;
+    }, []);
+
     const currentDisplayIndex = hasMatches ? highlighterState.currentIndex + 1 : 0;
 
     const statusInfo = useMemo(() => {
@@ -264,73 +295,33 @@ const ContentApp = () => {
     }, [overlayPosition]);
 
     useEffect(() => {
-        const overlay = overlayRef.current;
-        if (!overlay) {
-            return;
-        }
-
-        const getZoomScale = () => {
-            const viewport = window.visualViewport;
-            if (viewport?.scale && viewport.scale !== 1) {
-                console.log('[ZoomComp] visualViewport scale detected', viewport.scale);
-                return viewport.scale;
-            }
-
-            const derivedFromOuterWidth =
-                window.outerWidth && window.innerWidth
-                    ? window.outerWidth / window.innerWidth
-                    : null;
-            if (derivedFromOuterWidth && Number.isFinite(derivedFromOuterWidth) && derivedFromOuterWidth > 0) {
-                console.log('[ZoomComp] Derived scale from outer/inner width', derivedFromOuterWidth);
-                return derivedFromOuterWidth;
-            }
-
-            const docElement = document.documentElement;
-            if (docElement?.clientWidth && window.innerWidth) {
-                const derivedFromClientWidth = docElement.clientWidth / window.innerWidth;
-                if (
-                    derivedFromClientWidth &&
-                    Number.isFinite(derivedFromClientWidth) &&
-                    derivedFromClientWidth > 0
-                ) {
-                    console.log('[ZoomComp] Derived scale from client/inner width', derivedFromClientWidth);
-                    return derivedFromClientWidth;
+        const updateComputedScale = () => {
+            const zoomScale = getZoomScale();
+            const totalScale = manualScaleFactor / zoomScale;
+            setComputedScale((prev) => {
+                if (Math.abs(prev - totalScale) > 0.0001) {
+                    return totalScale;
                 }
-            }
-
-            console.log('[ZoomComp] Falling back to devicePixelRatio', window.devicePixelRatio);
-            return window.devicePixelRatio || 1;
-        };
-
-        const applyZoomCompensation = () => {
-            const scale = getZoomScale();
-            console.log('[ZoomComp] Applying compensation with inverse scale', 1 / scale);
-            overlay.style.transform = `scale(${1 / scale})`;
-            overlay.style.transformOrigin = 'top left';
-        };
-
-        const handleResize = () => {
-            console.log('[ZoomComp] Resize/scroll event detected, recalculating scale');
-            applyZoomCompensation();
+                return prev;
+            });
         };
 
         const viewport = window.visualViewport;
-        applyZoomCompensation();
-        window.addEventListener('resize', handleResize);
-        viewport?.addEventListener('resize', handleResize);
-        viewport?.addEventListener('scroll', handleResize);
-        console.log('[ZoomComp] Listeners attached', {
-            hasVisualViewport: Boolean(viewport),
-            initialScale: getZoomScale()
-        });
+        updateComputedScale();
+        window.addEventListener('resize', updateComputedScale);
+        viewport?.addEventListener('resize', updateComputedScale);
+        viewport?.addEventListener('scroll', updateComputedScale);
 
         return () => {
-            window.removeEventListener('resize', handleResize);
-            viewport?.removeEventListener('resize', handleResize);
-            viewport?.removeEventListener('scroll', handleResize);
-            console.log('[ZoomComp] Listeners cleaned up');
+            window.removeEventListener('resize', updateComputedScale);
+            viewport?.removeEventListener('resize', updateComputedScale);
+            viewport?.removeEventListener('scroll', updateComputedScale);
         };
-    }, []);
+    }, [getZoomScale, manualScaleFactor]);
+
+    useEffect(() => {
+        highlighterRef.current?.setManualScaleFactor(manualScaleFactor);
+    }, [manualScaleFactor]);
 
     const handleSearch = useCallback(async () => {
         const pattern = searchInput.trim();
@@ -856,6 +847,49 @@ const ContentApp = () => {
                                     </Button>
                                 </Stack>
                             </Stack>
+                            <Stack spacing={1}>
+                                <Typography variant="subtitle2" fontWeight={600}>
+                                    Widget scale ({manualScaleFactor.toFixed(2)}x)
+                                </Typography>
+                                <Slider
+                                    value={manualScaleSteps}
+                                    onChange={(_event, value) => {
+                                        if (typeof value === 'number') {
+                                            setManualScaleSteps(value);
+                                        }
+                                    }}
+                                    min={-5}
+                                    max={5}
+                                    step={1}
+                                    marks={[
+                                        { value: -5, label: '-5' },
+                                        { value: 0, label: '0' },
+                                        { value: 5, label: '+5' }
+                                    ]}
+                                    sx={{
+                                        color: 'primary.main',
+                                        height: 6,
+                                        '& .MuiSlider-thumb': {
+                                            width: 16,
+                                            height: 16,
+                                            backgroundColor: 'common.white',
+                                            border: '2px solid currentColor',
+                                            boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                                        },
+                                        '& .MuiSlider-rail': {
+                                            opacity: 0.3
+                                        },
+                                        '& .MuiSlider-mark': {
+                                            backgroundColor: 'primary.main'
+                                        },
+                                        '& .MuiSlider-markLabel': {
+                                            fontSize: 12,
+                                            fontWeight: 600,
+                                            color: 'text.secondary'
+                                        }
+                                    }}
+                                />
+                            </Stack>
                             <Divider />
                             <FormControlLabel
                                 control={
@@ -963,7 +997,9 @@ const ContentApp = () => {
                         bottom: 24,
                         left: `${overlayPosition.left}px`,
                         zIndex: 2147483647,
-                        pointerEvents: 'auto'
+                        pointerEvents: 'auto',
+                        transform: `scale(${computedScale})`,
+                        transformOrigin: 'bottom left'
                     }}
                 >
                     <Chip
