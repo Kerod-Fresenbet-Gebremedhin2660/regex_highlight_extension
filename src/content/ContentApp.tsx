@@ -12,7 +12,6 @@ import {
     IconButton,
     InputAdornment,
     Paper,
-    Slider,
     Stack,
     Switch,
     TextField,
@@ -130,8 +129,6 @@ const ContentApp = () => {
         return fallback;
     });
     const hasMatches = highlighterState.matchesTotal > 0;
-    const [manualScaleSteps, setManualScaleSteps] = useState(0);
-    const manualScaleFactor = useMemo(() => 1 + manualScaleSteps * 0.1, [manualScaleSteps]);
     const [computedScale, setComputedScale] = useState(1);
     const getZoomLevel = useCallback(() => {
         if (window.devicePixelRatio) {
@@ -284,7 +281,7 @@ const ContentApp = () => {
     useEffect(() => {
         const updateComputedScale = () => {
             const zoomLevel = getZoomLevel();
-            const totalScale = manualScaleFactor / zoomLevel;
+            const totalScale = zoomLevel > 0 ? 1 / zoomLevel : 1;
             setComputedScale((prev) => {
                 if (Math.abs(prev - totalScale) > 0.0001) {
                     return totalScale;
@@ -304,11 +301,7 @@ const ContentApp = () => {
             viewport?.removeEventListener('resize', updateComputedScale);
             viewport?.removeEventListener('scroll', updateComputedScale);
         };
-    }, [getZoomLevel, manualScaleFactor]);
-
-    useEffect(() => {
-        highlighterRef.current?.setManualScaleFactor(manualScaleFactor);
-    }, [manualScaleFactor]);
+    }, [getZoomLevel]);
 
     const handleSearch = useCallback(async () => {
         const pattern = searchInput.trim();
@@ -833,49 +826,6 @@ const ContentApp = () => {
                                         Clear
                                     </Button>
                                 </Stack>
-                            </Stack>
-                            <Stack spacing={1}>
-                                <Typography variant="subtitle2" fontWeight={600}>
-                                    Widget scale ({manualScaleFactor.toFixed(2)}x)
-                                </Typography>
-                                <Slider
-                                    value={manualScaleSteps}
-                                    onChange={(_event, value) => {
-                                        if (typeof value === 'number') {
-                                            setManualScaleSteps(value);
-                                        }
-                                    }}
-                                    min={-5}
-                                    max={5}
-                                    step={1}
-                                    marks={[
-                                        { value: -5, label: '-5' },
-                                        { value: 0, label: '0' },
-                                        { value: 5, label: '+5' }
-                                    ]}
-                                    sx={{
-                                        color: 'primary.main',
-                                        height: 6,
-                                        '& .MuiSlider-thumb': {
-                                            width: 16,
-                                            height: 16,
-                                            backgroundColor: 'common.white',
-                                            border: '2px solid currentColor',
-                                            boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                                        },
-                                        '& .MuiSlider-rail': {
-                                            opacity: 0.3
-                                        },
-                                        '& .MuiSlider-mark': {
-                                            backgroundColor: 'primary.main'
-                                        },
-                                        '& .MuiSlider-markLabel': {
-                                            fontSize: 12,
-                                            fontWeight: 600,
-                                            color: 'text.secondary'
-                                        }
-                                    }}
-                                />
                             </Stack>
                             <Divider />
                             <FormControlLabel

@@ -66,7 +66,6 @@ export class RegexHighlighter {
     private useZoomFallback = false;
     private zoomHandlingSetup = false;
     private currentUIScale = 1;
-    private manualScaleFactor = 1;
     private updateUIScaleBound: (() => void) | null = null;
     private sortIdleCallbackId: number | null = null;
     private sortTimeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -1403,17 +1402,14 @@ export class RegexHighlighter {
             overlay.dataset.translateY = String(translateY);
         }
         const translateValue = overlay.dataset.translateY ? Number(overlay.dataset.translateY) : 0;
-        const manualScale = this.manualScaleFactor || 1;
         if (this.useZoomFallback) {
-            const baseScale = this.currentUIScale || 1;
-            const combinedScale = baseScale * manualScale;
-            overlay.style.transformOrigin = 'top left';
-            overlay.style.transform = `translateY(${translateValue}px) scale(${combinedScale})`;
+            const scale = this.currentUIScale || 1;
+            overlay.style.transformOrigin = 'top right';
+            overlay.style.transform = `translateY(${translateValue}px) scale(${scale})`;
             overlay.style.zoom = '';
         } else {
-            overlay.style.transformOrigin = 'top left';
-            const transformScale = manualScale !== 1 ? ` scale(${manualScale})` : '';
-            overlay.style.transform = `translateY(${translateValue}px)${transformScale}`;
+            overlay.style.transformOrigin = '';
+            overlay.style.transform = `translateY(${translateValue}px)`;
             overlay.style.zoom = `${this.currentUIScale}`;
         }
     }
@@ -1423,28 +1419,16 @@ export class RegexHighlighter {
             return;
         }
         const container = this.markerContainer;
-        const baseScale = typeof scale === 'number' && scale > 0 ? scale : this.currentUIScale || 1;
-        const manualScale = this.manualScaleFactor || 1;
-        const effectiveScale = baseScale * manualScale;
+        const effectiveScale = typeof scale === 'number' && scale > 0 ? scale : this.currentUIScale || 1;
         if (this.useZoomFallback) {
-            container.style.transformOrigin = 'top left';
+            container.style.transformOrigin = 'top right';
             container.style.transform = `scale(${effectiveScale})`;
             container.style.zoom = '';
         } else {
-            container.style.transformOrigin = 'top left';
-            container.style.transform = manualScale !== 1 ? `scale(${manualScale})` : '';
-            container.style.zoom = `${baseScale}`;
+            container.style.transformOrigin = '';
+            container.style.transform = '';
+            container.style.zoom = `${effectiveScale}`;
         }
-    }
-
-    setManualScaleFactor(scale: number) {
-        const next = Number.isFinite(scale) && scale > 0 ? scale : 1;
-        if (Math.abs(this.manualScaleFactor - next) < 0.0001) {
-            return;
-        }
-        this.manualScaleFactor = next;
-        this.applyOverlayTransform();
-        this.applyMarkerScale();
     }
 
     scheduleSortPatternsByMatchCount() {
