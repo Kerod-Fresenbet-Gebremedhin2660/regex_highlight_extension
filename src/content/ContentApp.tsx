@@ -22,7 +22,6 @@ import { alpha, useTheme } from '@mui/material/styles';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import UnfoldLessIcon from '@mui/icons-material/UnfoldLess';
 import UnfoldMoreIcon from '@mui/icons-material/UnfoldMore';
-import CloseIcon from '@mui/icons-material/Close';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import SearchIcon from '@mui/icons-material/Search';
@@ -37,11 +36,10 @@ const OVERLAY_ID = 'regex-highlight-ui';
 const MARKERS_ID = 'regex-scrollbar-markers';
 const COLLAPSIBLE_SETTING_KEY = 'regex-highlight-setting-collapsibleExpanded';
 const MINIMIZED_SETTING_KEY = 'regex-highlight-setting-minimized';
-const HIDDEN_SETTING_KEY = 'regex-highlight-setting-hidden';
 
 type OverlayPosition = {
     top: number;
-    right: number;
+    left: number;
 };
 
 const defaultState: HighlighterState = {
@@ -90,16 +88,14 @@ const ContentApp = () => {
     const inputRef = useRef<HTMLInputElement | null>(null);
     const dragStateRef = useRef<{
         isDragging: boolean;
-        startY: number;
-        startTop: number;
-        startRight: number;
-        deltaY: number;
+        startX: number;
+        startLeft: number;
+        deltaX: number;
     }>({
         isDragging: false,
-        startY: 0,
-        startTop: 0,
-        startRight: 36,
-        deltaY: 0
+        startX: 0,
+        startLeft: 36,
+        deltaX: 0
     });
     const inputDirtyRef = useRef(false);
 
@@ -107,19 +103,18 @@ const ContentApp = () => {
     const [searchInput, setSearchInput] = useState('');
     const [validationError, setValidationError] = useState<string | null>(null);
     const [isMinimized, setIsMinimized] = useState(() => loadBooleanSetting(MINIMIZED_SETTING_KEY, true));
-    const [isHidden, setIsHidden] = useState(() => loadBooleanSetting(HIDDEN_SETTING_KEY, false));
     const [collapsibleExpanded, setCollapsibleExpanded] = useState(() =>
         loadBooleanSetting(COLLAPSIBLE_SETTING_KEY, true)
     );
     const [overlayPosition, setOverlayPosition] = useState<OverlayPosition>(() => {
-        const fallback: OverlayPosition = { top: 10, right: 36 };
+        const fallback: OverlayPosition = { top: 10, left: 36 };
         try {
             const stored = localStorage.getItem('regex-highlight-position');
             if (stored) {
                 const parsed = JSON.parse(stored) as Partial<OverlayPosition>;
                 return {
                     top: typeof parsed.top === 'number' ? parsed.top : fallback.top,
-                    right: typeof parsed.right === 'number' ? parsed.right : fallback.right
+                    left: typeof parsed.left === 'number' ? parsed.left : fallback.left
                 };
             }
         } catch {
@@ -160,7 +155,7 @@ const ContentApp = () => {
         return entries.map(([name, count]) => `${name}: ${count}`).join(', ');
     }, [highlighterState.matchTypeCounts]);
 
-    const showMiniChip = (isHidden || isMinimized) && highlighterState.searchPattern.trim();
+    const showMiniChip = isMinimized && highlighterState.searchPattern.trim();
     const chipLabel = highlighterState.searchPattern.trim()
         ? highlighterState.matchesTotal > 0
             ? `${currentDisplayIndex}/${highlighterState.matchesTotal}`
@@ -168,14 +163,11 @@ const ContentApp = () => {
         : 'Regex ready';
 
     const handleMiniChipClick = useCallback(() => {
-        if (isHidden) {
-            setIsHidden(false);
-            saveBooleanSetting(HIDDEN_SETTING_KEY, false);
-        } else if (isMinimized) {
+        if (isMinimized) {
             setIsMinimized(false);
             saveBooleanSetting(MINIMIZED_SETTING_KEY, false);
         }
-    }, [isHidden, isMinimized]);
+    }, [isMinimized]);
 
     const updateOverlayPosition = useCallback(
         (position: OverlayPosition) => {
@@ -185,8 +177,8 @@ const ContentApp = () => {
             }
             setOverlayPosition(position);
             overlay.style.top = `${position.top}px`;
-            overlay.style.right = `${position.right}px`;
-            overlay.style.left = 'auto';
+            overlay.style.left = `${position.left}px`;
+            overlay.style.right = 'auto';
             overlay.style.bottom = 'auto';
             highlighterRef.current?.saveOverlayPosition(position);
         },
@@ -237,7 +229,7 @@ const ContentApp = () => {
             if (savedPosition) {
                 updateOverlayPosition({
                     top: savedPosition.top,
-                    right: savedPosition.right
+                    left: savedPosition.left
                 });
             }
         }
@@ -260,8 +252,8 @@ const ContentApp = () => {
         if (overlay && container && highlighter) {
             highlighter.attachOverlayElements(overlay, container);
             overlay.style.top = `${overlayPosition.top}px`;
-            overlay.style.right = `${overlayPosition.right}px`;
-            overlay.style.left = 'auto';
+            overlay.style.left = `${overlayPosition.left}px`;
+            overlay.style.right = 'auto';
         }
     }, [overlayPosition]);
 
@@ -385,18 +377,10 @@ const ContentApp = () => {
         highlighterRef.current?.deletePattern(index);
     }, []);
 
-    const handleToggleVisibility = useCallback(() => {
-        setIsHidden((prev) => {
-            const next = !prev;
-            saveBooleanSetting(HIDDEN_SETTING_KEY, next);
-            return next;
-        });
-    }, []);
-
     useEffect(() => {
         const keydownHandler = (event: KeyboardEvent) => {
             const overlay = overlayRef.current;
-            if (!overlay || isHidden) {
+            if (!overlay) {
                 return;
             }
             const key = event.key ? event.key.toLowerCase() : '';
@@ -428,7 +412,7 @@ const ContentApp = () => {
         return () => {
             document.removeEventListener('keydown', keydownHandler, true);
         };
-    }, [handleSearch, isHidden, isMinimized]);
+    }, [handleSearch, isMinimized]);
 
     useEffect(() => {
         const overlay = overlayRef.current;
@@ -440,13 +424,12 @@ const ContentApp = () => {
             return;
         }
 
-        const startDrag = (clientY: number) => {
+        const startDrag = (clientX: number) => {
             if (!overlay) return;
             dragStateRef.current.isDragging = true;
-            dragStateRef.current.startY = clientY;
-            dragStateRef.current.startTop = overlayPosition.top;
-            dragStateRef.current.startRight = overlayPosition.right;
-            dragStateRef.current.deltaY = 0;
+            dragStateRef.current.startX = clientX;
+            dragStateRef.current.startLeft = overlayPosition.left;
+            dragStateRef.current.deltaX = 0;
             overlay.style.transition = 'none';
         };
 
@@ -455,7 +438,7 @@ const ContentApp = () => {
             if (target.closest('#regex-minimize-btn')) {
                 return;
             }
-            startDrag(event.clientY);
+            startDrag(event.clientX);
             event.preventDefault();
         };
 
@@ -463,12 +446,13 @@ const ContentApp = () => {
             if (!dragStateRef.current.isDragging || !overlay) {
                 return;
             }
-            const deltaY = event.clientY - dragStateRef.current.startY;
-            const height = overlay.getBoundingClientRect().height;
-            const maxTop = window.innerHeight - height;
-            const newTop = clamp(dragStateRef.current.startTop + deltaY, 0, maxTop);
-            dragStateRef.current.deltaY = newTop - dragStateRef.current.startTop;
-            highlighterRef.current?.applyOverlayTransform(dragStateRef.current.deltaY);
+            const deltaX = event.clientX - dragStateRef.current.startX;
+            const width = overlay.getBoundingClientRect().width;
+            const maxLeft = Math.max(0, window.innerWidth - width);
+            const newLeft = clamp(dragStateRef.current.startLeft + deltaX, 0, maxLeft);
+            dragStateRef.current.deltaX = newLeft - dragStateRef.current.startLeft;
+            overlay.style.left = `${newLeft}px`;
+            overlay.style.right = 'auto';
         };
 
         const endDrag = () => {
@@ -477,14 +461,13 @@ const ContentApp = () => {
             }
             dragStateRef.current.isDragging = false;
             overlay.style.transition = '';
-            const height = overlay.getBoundingClientRect().height;
-            const maxTop = window.innerHeight - height;
-            const finalTop = clamp(dragStateRef.current.startTop + dragStateRef.current.deltaY, 0, maxTop);
-            dragStateRef.current.deltaY = 0;
-            highlighterRef.current?.applyOverlayTransform(0);
+            const width = overlay.getBoundingClientRect().width;
+            const maxLeft = Math.max(0, window.innerWidth - width);
+            const finalLeft = clamp(dragStateRef.current.startLeft + dragStateRef.current.deltaX, 0, maxLeft);
+            dragStateRef.current.deltaX = 0;
             updateOverlayPosition({
-                top: finalTop,
-                right: dragStateRef.current.startRight
+                top: overlayPosition.top,
+                left: finalLeft
             });
         };
 
@@ -498,7 +481,7 @@ const ContentApp = () => {
                 return;
             }
             const touch = event.touches[0];
-            startDrag(touch.clientY);
+            startDrag(touch.clientX);
             event.preventDefault();
         };
 
@@ -507,12 +490,13 @@ const ContentApp = () => {
                 return;
             }
             const touch = event.touches[0];
-            const deltaY = touch.clientY - dragStateRef.current.startY;
-            const height = overlay.getBoundingClientRect().height;
-            const maxTop = window.innerHeight - height;
-            const newTop = clamp(dragStateRef.current.startTop + deltaY, 0, maxTop);
-            dragStateRef.current.deltaY = newTop - dragStateRef.current.startTop;
-            highlighterRef.current?.applyOverlayTransform(dragStateRef.current.deltaY);
+            const deltaX = touch.clientX - dragStateRef.current.startX;
+            const width = overlay.getBoundingClientRect().width;
+            const maxLeft = Math.max(0, window.innerWidth - width);
+            const newLeft = clamp(dragStateRef.current.startLeft + deltaX, 0, maxLeft);
+            dragStateRef.current.deltaX = newLeft - dragStateRef.current.startLeft;
+            overlay.style.left = `${newLeft}px`;
+            overlay.style.right = 'auto';
             event.preventDefault();
         };
 
@@ -532,7 +516,7 @@ const ContentApp = () => {
             document.removeEventListener('touchmove', handleTouchMove);
             document.removeEventListener('touchend', handleTouchEnd);
         };
-    }, [overlayPosition.top, updateOverlayPosition]);
+    }, [overlayPosition.left, overlayPosition.top, updateOverlayPosition]);
 
     useEffect(() => {
         const handleResize = () => {
@@ -542,10 +526,12 @@ const ContentApp = () => {
             }
             const rect = overlay.getBoundingClientRect();
             const maxTop = window.innerHeight - rect.height;
+            const maxLeft = window.innerWidth - rect.width;
             const newTop = clamp(rect.top, 0, Math.max(0, maxTop));
+            const newLeft = clamp(rect.left, 0, Math.max(0, maxLeft));
             updateOverlayPosition({
                 top: newTop,
-                right: overlayPosition.right
+                left: newLeft
             });
             highlighterRef.current?.updateUIScale();
         };
@@ -553,7 +539,7 @@ const ContentApp = () => {
         return () => {
             window.removeEventListener('resize', handleResize);
         };
-    }, [overlayPosition.right, updateOverlayPosition]);
+    }, [overlayPosition.left, updateOverlayPosition]);
 
     useEffect(() => {
         const messageHandler = (
@@ -580,19 +566,6 @@ const ContentApp = () => {
                     break;
                 case 'clear':
                     void highlighterRef.current?.clear().then(() => sendResponse({ success: true }));
-                    return true;
-                case 'getWidgetState':
-                    sendResponse({ success: true, isHidden });
-                    return true;
-                case 'hideWidget':
-                    setIsHidden(true);
-                    saveBooleanSetting(HIDDEN_SETTING_KEY, true);
-                    sendResponse({ success: true });
-                    return true;
-                case 'showWidget':
-                    setIsHidden(false);
-                    saveBooleanSetting(HIDDEN_SETTING_KEY, false);
-                    sendResponse({ success: true });
                     return true;
                 case 'getMatchPreviews':
                     if (highlighterRef.current) {
@@ -629,7 +602,7 @@ const ContentApp = () => {
         return () => {
             chrome.runtime.onMessage.removeListener(messageHandler);
         };
-    }, [isHidden, highlighterState]);
+    }, [highlighterState]);
 
     const renderPatternHistory = () => {
         if (!highlighterState.savedPatterns.length) {
@@ -670,10 +643,10 @@ const ContentApp = () => {
                 sx={{
                     position: 'fixed',
                     top: overlayPosition.top,
-                    right: overlayPosition.right,
-                    left: 'auto',
+                    left: overlayPosition.left,
+                    right: 'auto',
                     bottom: 'auto',
-                    display: isHidden ? 'none' : 'flex',
+                    display: 'flex',
                     flexDirection: 'column',
                     width: overlayWidth,
                     maxHeight: '85vh',
@@ -717,18 +690,6 @@ const ContentApp = () => {
                         >
                             {isMinimized ? <UnfoldMoreIcon fontSize="small" /> : <UnfoldLessIcon fontSize="small" />}
                         </IconButton>
-                        <IconButton
-                            size="small"
-                            color="inherit"
-                            onClick={handleToggleVisibility}
-                            aria-label={isHidden ? 'Show widget' : 'Hide widget'}
-                            sx={{
-                                bgcolor: 'rgba(255,255,255,0.15)',
-                                '&:hover': { bgcolor: 'rgba(255,255,255,0.3)' }
-                            }}
-                        >
-                            <CloseIcon fontSize="small" />
-                        </IconButton>
                     </Stack>
                 </Box>
                 <Collapse in={!isMinimized} unmountOnExit>
@@ -745,7 +706,6 @@ const ContentApp = () => {
                                     onChange={handleInputChange}
                                     onKeyDown={handleInputKeyPress}
                                     inputRef={inputRef}
-                                    disabled={isHidden}
                                     error={Boolean(validationError)}
                                     helperText={helperText}
                                     InputProps={{
@@ -897,7 +857,7 @@ const ContentApp = () => {
                     sx={{
                         position: 'fixed',
                         bottom: 24,
-                        right: `${overlayPosition.right}px`,
+                        left: `${overlayPosition.left}px`,
                         zIndex: 2147483647,
                         pointerEvents: 'auto'
                     }}

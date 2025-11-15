@@ -3,7 +3,6 @@ import {
     Alert,
     Box,
     Button,
-    CircularProgress,
     Collapse,
     Divider,
     List,
@@ -21,11 +20,6 @@ import RegexIcon from '@mui/icons-material/AutoFixHigh';
 import KeyboardIcon from '@mui/icons-material/Keyboard';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-
-type WidgetStateResponse = {
-    success: boolean;
-    isHidden: boolean;
-};
 
 type MessageResponse = {
     success: boolean;
@@ -76,8 +70,6 @@ async function sendTabMessage<T>(
 const PopupApp = () => {
     const theme = useTheme();
     const [isLoading, setIsLoading] = useState(true);
-    const [isHidden, setIsHidden] = useState<boolean | null>(null);
-    const [statusText, setStatusText] = useState<string>('');
     const [error, setError] = useState<string | null>(null);
     const [matchPreviews, setMatchPreviews] = useState<MatchPreview[]>([]);
     const [matchState, setMatchState] = useState<{
@@ -91,14 +83,17 @@ const PopupApp = () => {
         if (error) {
             return { severity: 'error' as const, text: error };
         }
-        if (statusText) {
-            return {
-                severity: isHidden ? ('warning' as const) : ('success' as const),
-                text: statusText
-            };
+        if (isLoading) {
+            return { severity: 'info' as const, text: 'Checking widget status...' };
         }
-        return { severity: 'info' as const, text: 'Widget status unknown' };
-    }, [error, isHidden, statusText]);
+        if (matchState) {
+            return { severity: 'success' as const, text: 'Widget is active on this page' };
+        }
+        return {
+            severity: 'warning' as const,
+            text: 'Widget is ready. Run a search in the widget to see matches.'
+        };
+    }, [error, isLoading, matchState]);
 
     const fetchMatchPreviews = useCallback(async (tabId: number) => {
         try {
@@ -129,22 +124,10 @@ const PopupApp = () => {
         try {
             const tab = await getActiveTab();
             if (!tab?.id) {
-                setIsHidden(null);
-                setStatusText('No active tab found');
-                setIsLoading(false);
+                setError('No active tab found');
+                setMatchPreviews([]);
+                setMatchState(null);
                 return;
-            }
-
-            const response = await sendTabMessage<WidgetStateResponse>(tab.id, {
-                action: 'getWidgetState'
-            });
-
-            if (response?.success && typeof response.isHidden === 'boolean') {
-                setIsHidden(response.isHidden);
-                setStatusText(response.isHidden ? 'Widget is hidden' : 'Widget is visible');
-            } else {
-                setIsHidden(null);
-                setStatusText('Widget not available on this page');
             }
 
             // Fetch match previews
@@ -152,8 +135,6 @@ const PopupApp = () => {
         } catch (err) {
             console.error('Failed to get widget state', err);
             setError('Widget not available on this page');
-            setIsHidden(null);
-            setStatusText('');
             setMatchPreviews([]);
             setMatchState(null);
         } finally {
@@ -180,48 +161,6 @@ const PopupApp = () => {
             return () => clearInterval(interval);
         }
     }, [refreshState, matchPreviewExpanded, matchState, fetchMatchPreviews]);
-
-    const handleToggle = useCallback(async () => {
-        setIsLoading(true);
-        setError(null);
-
-        try {
-            const tab = await getActiveTab();
-            if (!tab?.id) {
-                setError('No active tab found');
-                return;
-            }
-
-            const currentState = await sendTabMessage<WidgetStateResponse>(tab.id, {
-                action: 'getWidgetState'
-            });
-
-            if (!currentState?.success || typeof currentState.isHidden !== 'boolean') {
-                setError('Widget is not available on this page');
-                return;
-            }
-
-            const nextAction = currentState.isHidden ? 'showWidget' : 'hideWidget';
-            const result = await sendTabMessage<MessageResponse>(tab.id, {
-                action: nextAction
-            });
-
-            if (!result?.success) {
-                setError('Unable to toggle widget');
-                return;
-            }
-
-            // Give the content script a moment to update before refreshing
-            setTimeout(() => {
-                void refreshState();
-            }, 150);
-        } catch (err) {
-            console.error('Failed to toggle widget', err);
-            setError('Unable to communicate with the widget');
-        } finally {
-            setIsLoading(false);
-        }
-    }, [refreshState]);
 
     const handleMatchClick = useCallback(async (matchIndex: number) => {
         try {
@@ -250,8 +189,6 @@ const PopupApp = () => {
     const toggleMatchPreview = useCallback(() => {
         setMatchPreviewExpanded((prev) => !prev);
     }, []);
-
-    const isToggleDisabled = isHidden === null || isLoading;
 
     return (
         <Paper
@@ -288,19 +225,6 @@ const PopupApp = () => {
                     <Typography variant="body2">Save your favourite searches for quick reuse</Typography>
                 </Stack>
             </Stack>
-            <Button
-                onClick={handleToggle}
-                disabled={isToggleDisabled}
-                endIcon={
-                    isLoading ? (
-                        <CircularProgress size={16} color="inherit" />
-                    ) : (
-                        <ChevronRightIcon fontSize="small" />
-                    )
-                }
-            >
-                {isHidden ? 'Show Widget' : 'Hide Widget'}
-            </Button>
             <Alert severity={statusMessage.severity} variant="outlined">
                 {statusMessage.text}
             </Alert>

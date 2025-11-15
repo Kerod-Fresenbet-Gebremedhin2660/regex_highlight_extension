@@ -346,7 +346,7 @@ export class RegexHighlighter {
         });
     }
 
-    saveOverlayPosition(position: { top: number; right: number }) {
+    saveOverlayPosition(position: { top: number; left: number }) {
         try {
             localStorage.setItem(POSITION_STORAGE_KEY, JSON.stringify(position));
         } catch (error) {
@@ -354,11 +354,11 @@ export class RegexHighlighter {
         }
     }
 
-    loadOverlayPosition(): { top: number; right: number } | null {
+    loadOverlayPosition(): { top: number; left: number } | null {
         try {
             const saved = localStorage.getItem(POSITION_STORAGE_KEY);
             if (saved) {
-                const parsed = JSON.parse(saved) as { top: number; right: number };
+                const parsed = JSON.parse(saved) as { top: number; left: number };
                 return parsed;
             }
         } catch (error) {
