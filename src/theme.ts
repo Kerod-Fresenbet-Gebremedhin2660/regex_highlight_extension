@@ -54,6 +54,11 @@ const theme = createTheme({
                     '&:hover': {
                         backgroundColor: '#f3f3f3',
                         boxShadow: 'none'
+                    },
+                    '&.Mui-disabled': {
+                        backgroundColor: '#b5b5b5',
+                        color: '#000000',
+                        borderColor: '#b5b5b5'
                     }
                 }
             }
@@ -77,6 +82,15 @@ const theme = createTheme({
                         '&.Mui-focused fieldset': {
                             borderColor: '#000000'
                         }
+                    },
+                    '& .MuiInputLabel-root': {
+                        color: '#000000',
+                        '&.Mui-focused': {
+                            color: '#000000'
+                        },
+                        '&.Mui-disabled': {
+                            color: 'rgba(0,0,0,0.4)'
+                        }
                     }
                 }
             }
@@ -85,7 +99,73 @@ const theme = createTheme({
             styleOverrides: {
                 root: {
                     borderRadius: 8,
-                    fontWeight: 500
+                    fontWeight: 500,
+                    color: '#000000',
+                    border: '1px solid #000000',
+                    '&.MuiChip-filled': {
+                        backgroundColor: '#ffffff'
+                    },
+                    '& .MuiChip-deleteIcon': {
+                        color: '#000000',
+                        '&:hover': {
+                            color: '#000000'
+                        }
+                    }
+                }
+            }
+        },
+        MuiCheckbox: {
+            styleOverrides: {
+                root: {
+                    padding: 4,
+                    color: '#000000',
+                    '& .MuiSvgIcon-root': {
+                        borderRadius: 6,
+                        border: '1px solid rgba(0,0,0,0.4)',
+                        backgroundColor: '#ffffff',
+                        transition: 'border-color 0.2s ease, color 0.2s ease'
+                    },
+                    '&:hover .MuiSvgIcon-root': {
+                        borderColor: 'rgba(0,0,0,0.7)'
+                    },
+                    '&.Mui-checked': {
+                        color: '#000000'
+                    },
+                    '&.Mui-checked .MuiSvgIcon-root': {
+                        borderColor: '#000000',
+                        color: '#000000'
+                    }
+                }
+            }
+        },
+        MuiSwitch: {
+            styleOverrides: {
+                root: {
+                    padding: 8
+                },
+                track: {
+                    borderRadius: 20,
+                    backgroundColor: '#ffffff',
+                    border: '1px solid rgba(0,0,0,0.4)',
+                    opacity: 1,
+                    transition: 'background-color 0.2s ease'
+                },
+                thumb: {
+                    boxShadow: 'none',
+                    backgroundColor: '#000000'
+                },
+                switchBase: {
+                    '&.Mui-checked': {
+                        color: '#000000',
+                        '& .MuiSwitch-thumb': {
+                            backgroundColor: '#000000'
+                        },
+                        '& + .MuiSwitch-track': {
+                            backgroundColor: '#b5b5b5',
+                            borderColor: '#000000',
+                            opacity: 1
+                        }
+                    }
                 }
             }
         }

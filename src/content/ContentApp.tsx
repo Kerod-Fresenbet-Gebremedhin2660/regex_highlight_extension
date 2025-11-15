@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+    Accordion,
+    AccordionDetails,
+    AccordionSummary,
     Box,
     Button,
     Chip,
-    Collapse,
     Divider,
     FormControlLabel,
     FormGroup,
@@ -35,6 +37,7 @@ import {
 const OVERLAY_ID = 'regex-highlight-ui';
 const MARKERS_ID = 'regex-scrollbar-markers';
 const COLLAPSIBLE_SETTING_KEY = 'regex-highlight-setting-collapsibleExpanded';
+const PATTERN_COLLAPSIBLE_SETTING_KEY = 'regex-highlight-setting-patternsExpanded';
 const MINIMIZED_SETTING_KEY = 'regex-highlight-setting-minimized';
 
 type OverlayPosition = {
@@ -103,8 +106,11 @@ const ContentApp = () => {
     const [searchInput, setSearchInput] = useState('');
     const [validationError, setValidationError] = useState<string | null>(null);
     const [isMinimized, setIsMinimized] = useState(() => loadBooleanSetting(MINIMIZED_SETTING_KEY, true));
-    const [collapsibleExpanded, setCollapsibleExpanded] = useState(() =>
+    const [flagsExpanded, setFlagsExpanded] = useState(() =>
         loadBooleanSetting(COLLAPSIBLE_SETTING_KEY, true)
+    );
+    const [patternsExpanded, setPatternsExpanded] = useState(() =>
+        loadBooleanSetting(PATTERN_COLLAPSIBLE_SETTING_KEY, true)
     );
     const [overlayPosition, setOverlayPosition] = useState<OverlayPosition>(() => {
         const fallback: OverlayPosition = { top: 10, left: 36 };
@@ -355,12 +361,14 @@ const ContentApp = () => {
         });
     }, []);
 
-    const toggleCollapsible = useCallback(() => {
-        setCollapsibleExpanded((prev) => {
-            const next = !prev;
-            saveBooleanSetting(COLLAPSIBLE_SETTING_KEY, next);
-            return next;
-        });
+    const handleFlagsAccordionChange = useCallback((_event: React.SyntheticEvent, expanded: boolean) => {
+        setFlagsExpanded(expanded);
+        saveBooleanSetting(COLLAPSIBLE_SETTING_KEY, expanded);
+    }, []);
+
+    const handlePatternsAccordionChange = useCallback((_event: React.SyntheticEvent, expanded: boolean) => {
+        setPatternsExpanded(expanded);
+        saveBooleanSetting(PATTERN_COLLAPSIBLE_SETTING_KEY, expanded);
     }, []);
 
 
@@ -651,7 +659,7 @@ const ContentApp = () => {
                     width: overlayWidth,
                     maxHeight: '85vh',
                     overflow: 'hidden',
-                    border: '1px solid rgba(0,0,0,0.08)',
+                    border: '1px solid #000000',
                     zIndex: 2147483647
                 }}
             >
@@ -692,8 +700,14 @@ const ContentApp = () => {
                         </IconButton>
                     </Stack>
                 </Box>
-                <Collapse in={!isMinimized} unmountOnExit>
-                    <Box sx={{ p: 2 }}>
+                {!isMinimized && (
+                    <Box
+                        sx={{
+                            p: 2,
+                            flex: 1,
+                            overflowY: 'auto'
+                        }}
+                    >
                         <Stack spacing={2}>
                             <Stack spacing={1}>
                                 <TextField
@@ -783,60 +797,81 @@ const ContentApp = () => {
                                 }
                                 label="Scroll to first match on search"
                             />
-                            <Box>
-                                <Button
-                                    variant="text"
-                                    size="small"
-                                    onClick={toggleCollapsible}
-                                    endIcon={collapsibleExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                                    sx={{ fontWeight: 600 }}
+                            <Accordion
+                                expanded={flagsExpanded}
+                                onChange={handleFlagsAccordionChange}
+                                disableGutters
+                                square
+                                elevation={0}
+                                sx={{
+                                    border: '1px solid rgba(0,0,0,0.12)',
+                                    borderRadius: 1,
+                                    '&:before': { display: 'none' }
+                                }}
+                            >
+                                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                                    <Typography fontWeight={600}>Flags</Typography>
+                                </AccordionSummary>
+                                <AccordionDetails>
+                                    <FormGroup row>
+                                        <FormControlLabel
+                                            control={
+                                                <Checkbox
+                                                    checked={highlighterState.regexFlags.global}
+                                                    onChange={handleFlagChange('global')}
+                                                />
+                                            }
+                                            label="g (Global)"
+                                        />
+                                        <FormControlLabel
+                                            control={
+                                                <Checkbox
+                                                    checked={highlighterState.regexFlags.ignoreCase}
+                                                    onChange={handleFlagChange('ignoreCase')}
+                                                />
+                                            }
+                                            label="i (Ignore Case)"
+                                        />
+                                        <FormControlLabel
+                                            control={
+                                                <Checkbox
+                                                    checked={highlighterState.regexFlags.multiline}
+                                                    onChange={handleFlagChange('multiline')}
+                                                />
+                                            }
+                                            label="m (Multiline)"
+                                        />
+                                        <FormControlLabel
+                                            control={
+                                                <Checkbox
+                                                    checked={highlighterState.regexFlags.dotAll}
+                                                    onChange={handleFlagChange('dotAll')}
+                                                />
+                                            }
+                                            label="s (DotAll)"
+                                        />
+                                    </FormGroup>
+                                </AccordionDetails>
+                            </Accordion>
+                            {highlighterState.savedPatterns.length > 0 && (
+                                <Accordion
+                                    expanded={patternsExpanded}
+                                    onChange={handlePatternsAccordionChange}
+                                    disableGutters
+                                    square
+                                    elevation={0}
+                                    sx={{
+                                        border: '1px solid rgba(0,0,0,0.12)',
+                                        borderRadius: 1,
+                                        '&:before': { display: 'none' }
+                                    }}
                                 >
-                                    {highlighterState.savedPatterns.length > 0 ? 'Flags & Saved Patterns' : 'Flags'}
-                                </Button>
-                                <Collapse in={collapsibleExpanded}>
-                                    <Stack spacing={1} sx={{ mt: 1 }}>
-                                        <FormGroup row>
-                                            <FormControlLabel
-                                                control={
-                                                    <Checkbox
-                                                        checked={highlighterState.regexFlags.global}
-                                                        onChange={handleFlagChange('global')}
-                                                    />
-                                                }
-                                                label="g (Global)"
-                                            />
-                                            <FormControlLabel
-                                                control={
-                                                    <Checkbox
-                                                        checked={highlighterState.regexFlags.ignoreCase}
-                                                        onChange={handleFlagChange('ignoreCase')}
-                                                    />
-                                                }
-                                                label="i (Ignore Case)"
-                                            />
-                                            <FormControlLabel
-                                                control={
-                                                    <Checkbox
-                                                        checked={highlighterState.regexFlags.multiline}
-                                                        onChange={handleFlagChange('multiline')}
-                                                    />
-                                                }
-                                                label="m (Multiline)"
-                                            />
-                                            <FormControlLabel
-                                                control={
-                                                    <Checkbox
-                                                        checked={highlighterState.regexFlags.dotAll}
-                                                        onChange={handleFlagChange('dotAll')}
-                                                    />
-                                                }
-                                                label="s (DotAll)"
-                                            />
-                                        </FormGroup>
-                                        {renderPatternHistory()}
-                                    </Stack>
-                                </Collapse>
-                            </Box>
+                                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                                        <Typography fontWeight={600}>Saved Patterns</Typography>
+                                    </AccordionSummary>
+                                    <AccordionDetails>{renderPatternHistory()}</AccordionDetails>
+                                </Accordion>
+                            )}
                             <Divider />
                             <Box textAlign="center">
                                 <Typography variant="body1" fontWeight={600}>
@@ -850,7 +885,7 @@ const ContentApp = () => {
                             </Box>
                         </Stack>
                     </Box>
-                </Collapse>
+                )}
             </Paper>
             {showMiniChip && (
                 <Box
