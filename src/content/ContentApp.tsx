@@ -263,6 +263,75 @@ const ContentApp = () => {
         }
     }, [overlayPosition]);
 
+    useEffect(() => {
+        const overlay = overlayRef.current;
+        if (!overlay) {
+            return;
+        }
+
+        const getZoomScale = () => {
+            const viewport = window.visualViewport;
+            if (viewport?.scale && viewport.scale !== 1) {
+                console.log('[ZoomComp] visualViewport scale detected', viewport.scale);
+                return viewport.scale;
+            }
+
+            const derivedFromOuterWidth =
+                window.outerWidth && window.innerWidth
+                    ? window.outerWidth / window.innerWidth
+                    : null;
+            if (derivedFromOuterWidth && Number.isFinite(derivedFromOuterWidth) && derivedFromOuterWidth > 0) {
+                console.log('[ZoomComp] Derived scale from outer/inner width', derivedFromOuterWidth);
+                return derivedFromOuterWidth;
+            }
+
+            const docElement = document.documentElement;
+            if (docElement?.clientWidth && window.innerWidth) {
+                const derivedFromClientWidth = docElement.clientWidth / window.innerWidth;
+                if (
+                    derivedFromClientWidth &&
+                    Number.isFinite(derivedFromClientWidth) &&
+                    derivedFromClientWidth > 0
+                ) {
+                    console.log('[ZoomComp] Derived scale from client/inner width', derivedFromClientWidth);
+                    return derivedFromClientWidth;
+                }
+            }
+
+            console.log('[ZoomComp] Falling back to devicePixelRatio', window.devicePixelRatio);
+            return window.devicePixelRatio || 1;
+        };
+
+        const applyZoomCompensation = () => {
+            const scale = getZoomScale();
+            console.log('[ZoomComp] Applying compensation with inverse scale', 1 / scale);
+            overlay.style.transform = `scale(${1 / scale})`;
+            overlay.style.transformOrigin = 'top left';
+        };
+
+        const handleResize = () => {
+            console.log('[ZoomComp] Resize/scroll event detected, recalculating scale');
+            applyZoomCompensation();
+        };
+
+        const viewport = window.visualViewport;
+        applyZoomCompensation();
+        window.addEventListener('resize', handleResize);
+        viewport?.addEventListener('resize', handleResize);
+        viewport?.addEventListener('scroll', handleResize);
+        console.log('[ZoomComp] Listeners attached', {
+            hasVisualViewport: Boolean(viewport),
+            initialScale: getZoomScale()
+        });
+
+        return () => {
+            window.removeEventListener('resize', handleResize);
+            viewport?.removeEventListener('resize', handleResize);
+            viewport?.removeEventListener('scroll', handleResize);
+            console.log('[ZoomComp] Listeners cleaned up');
+        };
+    }, []);
+
     const handleSearch = useCallback(async () => {
         const pattern = searchInput.trim();
         if (!pattern || pattern.length < 2) {
