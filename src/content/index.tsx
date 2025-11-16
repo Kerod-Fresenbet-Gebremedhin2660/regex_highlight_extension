@@ -52,17 +52,56 @@ function ensureContainer(): ContainerResult {
     return { container, shadow };
 }
 
-const { container, shadow } = ensureContainer();
-const cache = createCache({ key: 'mui-regex', container: shadow });
-const root = createRoot(container);
+const STORAGE_KEY = 'domainWhitelist';
+const DEFAULT_WHITELIST = ['archiveofourown.org', 'fanfiction.net'];
 
-root.render(
-    <StrictMode>
-        <CacheProvider value={cache}>
-            <ThemeProvider theme={theme}>
-                <ContentApp />
-            </ThemeProvider>
-        </CacheProvider>
-    </StrictMode>
-);
+function isHostAllowed(hostname: string, whitelist: string[]): boolean {
+    const host = hostname.toLowerCase();
+    for (const domain of whitelist) {
+        const d = domain.toLowerCase();
+        if (host === d) return true;
+        if (host.endsWith('.' + d)) return true;
+    }
+    return false;
+}
+
+(async () => {
+    try {
+        const hostname = window.location.hostname;
+        const list = await new Promise<string[]>((resolve) => {
+            try {
+                chrome.storage.sync.get([STORAGE_KEY], (result) => {
+                    const stored = Array.isArray(result?.[STORAGE_KEY]) ? (result[STORAGE_KEY] as string[]) : null;
+                    if (stored && stored.length > 0) {
+                        resolve(stored);
+                    } else {
+                        resolve(DEFAULT_WHITELIST);
+                    }
+                });
+            } catch {
+                resolve(DEFAULT_WHITELIST);
+            }
+        });
+        if (!isHostAllowed(hostname, list)) {
+            return;
+        }
+    } catch {
+        // On any failure, do not render to be safe
+        return;
+    }
+
+    const { container, shadow } = ensureContainer();
+    const cache = createCache({ key: 'mui-regex', container: shadow });
+    const root = createRoot(container);
+
+    root.render(
+        <StrictMode>
+            <CacheProvider value={cache}>
+                <ThemeProvider theme={theme}>
+                    <ContentApp />
+                </ThemeProvider>
+            </CacheProvider>
+        </StrictMode>
+    );
+})();
 

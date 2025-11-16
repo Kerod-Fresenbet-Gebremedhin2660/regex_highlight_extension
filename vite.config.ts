@@ -25,13 +25,14 @@ export default defineConfig({
         emptyOutDir: true,
         rollupOptions: {
             input: {
-                popup: resolve(__dirname, 'popup.html')
+                popup: resolve(__dirname, 'popup.html'),
+                options: resolve(__dirname, 'options.html')
             },
             output: {
                 entryFileNames: 'assets/[name].js',
                 chunkFileNames: 'assets/[name].js',
                 assetFileNames: (assetInfo) => {
-                    if (assetInfo.name === 'style.css') {
+                    if (assetInfo.name === 'style.css' && (process.env.VITE_BUILD_PAGE || '').includes('popup')) {
                         return 'assets/popup.css';
                     }
                     return 'assets/[name][extname]';
