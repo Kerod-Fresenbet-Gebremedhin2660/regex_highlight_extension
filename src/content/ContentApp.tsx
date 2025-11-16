@@ -132,6 +132,271 @@ const ContentApp = () => {
     const hasMatches = highlighterState.matchesTotal > 0;
     const [computedScale, setComputedScale] = useState(1);
     const [isInputFocused, setIsInputFocused] = useState(false);
+
+    const buildFlagDescription = (flags: RegexFlags) => {
+        const parts: string[] = [];
+        if (flags.ignoreCase) parts.push('case-insensitive');
+        if (flags.multiline) parts.push('multi-line');
+        if (flags.dotAll) parts.push('dot matches newline');
+        return parts.length ? ` (${parts.join(', ')})` : '';
+    };
+
+    // A light-weight semantic translator for common regex constructs.
+    const translateRegex = useCallback((pattern: string, flags: RegexFlags): string => {
+        const trimmed = pattern.trim();
+        if (!trimmed) return '';
+        // Helper: split by unescaped pipes outside of parentheses and character classes
+        const splitAlternation = (input: string): string[] => {
+            const parts: string[] = [];
+            let buf = '';
+            let depth = 0;
+            let inClass = false;
+            let escaped = false;
+            for (let i = 0; i < input.length; i++) {
+                const ch = input[i];
+                if (escaped) {
+                    buf += ch;
+                    escaped = false;
+                    continue;
+                }
+                if (ch === '\\') {
+                    buf += ch;
+                    escaped = true;
+                    continue;
+                }
+                if (!inClass && ch === '(') depth++;
+                if (!inClass && ch === ')') depth = Math.max(0, depth - 1);
+                if (ch === '[' && !inClass) inClass = true;
+                else if (ch === ']' && inClass) inClass = false;
+                if (ch === '|' && depth === 0 && !inClass) {
+                    parts.push(buf);
+                    buf = '';
+                } else {
+                    buf += ch;
+                }
+            }
+            parts.push(buf);
+            return parts;
+        };
+
+        // Basic tokens
+        const tokenMap: Array<{ re: RegExp; desc: (m: RegExpMatchArray) => string }> = [
+            { re: /^\\d$/, desc: () => 'a digit' },
+            { re: /^\\D$/, desc: () => 'a non-digit' },
+            { re: /^\\w$/, desc: () => 'a word character' },
+            { re: /^\\W$/, desc: () => 'a non-word character' },
+            { re: /^\\s$/, desc: () => 'a whitespace character' },
+            { re: /^\\S$/, desc: () => 'a non-whitespace character' },
+            { re: /^\.$/, desc: () => 'any character' },
+            { re: /^\\b$/, desc: () => 'a word boundary' },
+            { re: /^\\B$/, desc: () => 'a non-word boundary' }
+        ];
+
+        const describeClass = (cls: string): string => {
+            // Remove brackets
+            const negated = cls.startsWith('^');
+            const body = negated ? cls.slice(1) : cls;
+            const items: string[] = [];
+            // Simple ranges and common escapes
+            if (/[a-z]-[a-z]/i.test(body)) items.push('letters');
+            if (/[0-9]-[0-9]/.test(body)) items.push('digits');
+            if (/\\s/.test(body)) items.push('whitespace');
+            if (/\\w/.test(body)) items.push('word chars');
+            if (/\\d/.test(body)) items.push('digits');
+            if (!items.length) items.push('listed characters');
+            return negated ? `any character except ${items.join(' or ')}` : `any of ${items.join(' or ')}`;
+        };
+
+        const describeAtom = (atom: string): string => {
+            // Character class
+            const classMatch = atom.match(/^\[(.*)\]$/s);
+            if (classMatch) return describeClass(classMatch[1]);
+            // Grouped expression: return inner description
+            const groupMatch = atom.match(/^\((\?:)?(.*)\)$/s);
+            if (groupMatch) return describeSequence(groupMatch[2]);
+            // Escaped or single-char tokens
+            for (const t of tokenMap) {
+                if (t.re.test(atom)) return t.desc(['' as any] as any);
+            }
+            if (atom.length === 1) {
+                if (atom === '^') return 'start of line';
+                if (atom === '$') return 'end of line';
+                return `'${atom}'`;
+            }
+            // Fallback: literal string (strip escapes)
+            const literal = atom.replace(/\\(.)/g, '$1');
+            return `'${literal}'`;
+        };
+
+        const describeQuantified = (base: string, quant?: string): string => {
+            const baseDesc = describeAtom(base);
+            if (!quant) return baseDesc;
+            if (quant === '*') return `${baseDesc} zero or more times`;
+            if (quant === '+') return `${baseDesc} one or more times`;
+            if (quant === '?') return `${baseDesc} zero or one time`;
+            const m = quant.match(/^\{(\d+)(?:,(\d+)?)?\}$/);
+            if (m) {
+                const a = m[1];
+                const b = m[2];
+                if (b === undefined) return `${baseDesc} exactly ${a} times`;
+                if (b === '') return `${baseDesc} at least ${a} times`;
+                return `${baseDesc} between ${a} and ${b} times`;
+            }
+            return `${baseDesc} ${quant}`;
+        };
+
+        const describeSequence = (seq: string): string => {
+            // Tokenize: atoms can be () [] \. ^ $ literals, plus quantifiers following atoms
+            const out: string[] = [];
+            let i = 0;
+            while (i < seq.length) {
+                let ch = seq[i];
+                if (ch === '\\') {
+                    const atom = seq.slice(i, i + 2);
+                    const next = seq[i + 2];
+                    if (next && /[\*\+\?\{]/.test(next)) {
+                        // quantifier after escaped token
+                        let quant = next;
+                        let j = i + 3;
+                        if (quant === '{') {
+                            while (j < seq.length && seq[j] !== '}') j++;
+                            if (seq[j] === '}') quant = seq.slice(i + 2, j + 1);
+                            else quant = '{';
+                            i = j + 1;
+                        } else {
+                            i = i + 3;
+                        }
+                        out.push(describeQuantified(atom, quant));
+                    } else {
+                        out.push(describeQuantified(atom));
+                        i += 2;
+                    }
+                    continue;
+                }
+                if (ch === '[') {
+                    let j = i + 1, inEsc = false;
+                    while (j < seq.length) {
+                        const cj = seq[j];
+                        if (!inEsc && cj === '\\') { inEsc = true; j++; continue; }
+                        if (!inEsc && cj === ']') break;
+                        inEsc = false;
+                        j++;
+                    }
+                    const atom = seq.slice(i, Math.min(seq.length, j + 1));
+                    const next = seq[j + 1];
+                    if (next && /[\*\+\?\{]/.test(next)) {
+                        let quant = next;
+                        let k = j + 2;
+                        if (quant === '{') {
+                            while (k < seq.length && seq[k] !== '}') k++;
+                            if (seq[k] === '}') quant = seq.slice(j + 1, k + 1);
+                            else quant = '{';
+                            i = k + 1;
+                        } else {
+                            i = j + 2;
+                        }
+                        out.push(describeQuantified(atom, quant));
+                    } else {
+                        out.push(describeQuantified(atom));
+                        i = j + 1;
+                    }
+                    continue;
+                }
+                if (ch === '(') {
+                    let j = i + 1, depth = 1, inEsc = false;
+                    while (j < seq.length && depth > 0) {
+                        const cj = seq[j];
+                        if (!inEsc && cj === '\\') { inEsc = true; j++; continue; }
+                        if (!inEsc && cj === '(') depth++;
+                        else if (!inEsc && cj === ')') depth--;
+                        inEsc = false;
+                        j++;
+                    }
+                    const atom = seq.slice(i, Math.min(seq.length, j));
+                    const next = seq[j];
+                    if (next && /[\*\+\?\{]/.test(next)) {
+                        let quant = next;
+                        let k = j + 1;
+                        if (quant === '{') {
+                            while (k < seq.length && seq[k] !== '}') k++;
+                            if (seq[k] === '}') quant = seq.slice(j, k + 1);
+                            else quant = '{';
+                            i = k + 1;
+                        } else {
+                            i = j + 1;
+                        }
+                        out.push(describeQuantified(atom, quant));
+                    } else {
+                        out.push(describeQuantified(atom));
+                        i = j;
+                    }
+                    continue;
+                }
+                // Single char with optional quantifier
+                let quant: string | undefined;
+                const next = seq[i + 1];
+                if (next && /[\*\+\?\{]/.test(next)) {
+                    if (next === '{') {
+                        let j = i + 2;
+                        while (j < seq.length && seq[j] !== '}') j++;
+                        if (seq[j] === '}') quant = seq.slice(i + 1, j + 1);
+                        else quant = '{';
+                        i = j + 1;
+                    } else {
+                        quant = next;
+                        i = i + 2;
+                    }
+                } else {
+                    i = i + 1;
+                }
+                out.push(describeQuantified(ch, quant));
+            }
+            // Merge obvious literals like 'a' 'b' 'c' into a word when contiguous
+            const merged: string[] = [];
+            let literalRun: string[] = [];
+            const flushRun = () => {
+                if (literalRun.length === 0) return;
+                const text = literalRun.map((t) => t.slice(1, -1)).join('');
+                merged.push(`'${text}'`);
+                literalRun = [];
+            };
+            for (const part of out) {
+                const m = part.match(/^'(.*)'$/);
+                if (m) {
+                    literalRun.push(part);
+                } else {
+                    flushRun();
+                    merged.push(part);
+                }
+            }
+            flushRun();
+            return merged.join(', ');
+        };
+
+        try {
+            // High level: alternation
+            const parts = splitAlternation(trimmed).filter(Boolean);
+            let desc: string;
+            if (parts.length > 1) {
+                const alts = parts.map((p) => describeSequence(p));
+                desc = `pattern searches for ${alts.join(' or ')}`;
+            } else {
+                const body = trimmed.replace(/^\^/, '').replace(/\$$/, '');
+                const anchors = [
+                    trimmed.startsWith('^') ? 'from the start' : '',
+                    trimmed.endsWith('$') ? 'to the end' : ''
+                ].filter(Boolean);
+                const core = describeSequence(body);
+                desc = `pattern searches for ${core}`;
+                if (anchors.length) desc += ` (${anchors.join(', ')})`;
+            }
+            desc += buildFlagDescription(flags);
+            return desc;
+        } catch {
+            // On failure, just show the raw pattern
+            return trimmed;
+        }
+    }, []);
     const getZoomLevel = useCallback(() => {
         if (window.devicePixelRatio) {
             return window.devicePixelRatio;
@@ -838,12 +1103,12 @@ const ContentApp = () => {
                                                     display: 'inline-block',
                                                     whiteSpace: 'nowrap',
                                                     pr: 4,
-                                                    animation: `${marqueeAnim} 12s linear infinite`
+                                                    animation: `${marqueeAnim} 24s linear infinite`
                                                 }}
                                             >
-                                                {searchInput}
+                                                {translateRegex(searchInput, highlighterState.regexFlags)}
                                                 <span style={{ paddingLeft: 32 }} />
-                                                {searchInput}
+                                                {translateRegex(searchInput, highlighterState.regexFlags)}
                                             </Box>
                                         </Box>
                                     )}
