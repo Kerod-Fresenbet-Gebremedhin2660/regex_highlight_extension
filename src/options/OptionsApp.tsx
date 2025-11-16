@@ -92,7 +92,13 @@ const OptionsApp = () => {
                             error={Boolean(error)}
                             helperText={helperText}
                         />
-                        <Button variant="contained" onClick={handleAdd} disabled={loading || input.trim().length === 0}>
+                        <Button
+                            variant="contained"
+                            onClick={handleAdd}
+                            disabled={loading || input.trim().length === 0}
+                            size="small"
+                            sx={{ height: 40 }}
+                        >
                             Add
                         </Button>
                     </Stack>
