@@ -4,6 +4,9 @@ import { Box, Button, Chip, Container, Stack, TextField, Typography, Paper } fro
 const STORAGE_KEY = 'domainWhitelist';
 const DEFAULT_WHITELIST = ['archiveofourown.org', 'fanfiction.net'];
 
+// RFC 1035-ish domain regex (labels 1-63 chars, overall <=253, no leading/trailing hyphens)
+const DOMAIN_REGEX = /^(?=.{1,253}$)(?!-)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?))+$/i;
+
 function normalizeDomain(input: string): string | null {
     const trimmed = input.trim().toLowerCase();
     if (!trimmed) return null;
@@ -11,13 +14,12 @@ function normalizeDomain(input: string): string | null {
         // Accept raw domain, with/without protocol or path
         if (trimmed.includes('://')) {
             const url = new URL(trimmed);
-            return url.hostname.replace(/^www\./, '');
+            const host = url.hostname.replace(/^www\./, '');
+            return DOMAIN_REGEX.test(host) ? host : null;
         }
         // Strip protocol-less paths
         const cleaned = trimmed.replace(/^www\./, '').split('/')[0];
-        // Basic validation: has at least one dot
-        if (!cleaned.includes('.')) return null;
-        return cleaned;
+        return DOMAIN_REGEX.test(cleaned) ? cleaned : null;
     } catch {
         return null;
     }
@@ -88,7 +90,20 @@ const OptionsApp = () => {
                             label="Add domain"
                             placeholder="example.com"
                             value={input}
-                            onChange={(e) => setInput(e.target.value)}
+                            onChange={(e) => {
+                                const value = e.target.value;
+                                setInput(value);
+                                if (!value.trim()) {
+                                    setError(null);
+                                    return;
+                                }
+                                const normalized = normalizeDomain(value);
+                                if (!normalized) {
+                                    setError('Enter a valid domain (e.g., example.com)');
+                                } else {
+                                    setError(null);
+                                }
+                            }}
                             error={Boolean(error)}
                             helperText={helperText}
                         />
