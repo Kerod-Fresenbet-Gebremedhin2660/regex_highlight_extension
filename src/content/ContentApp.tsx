@@ -21,6 +21,7 @@ import {
     ScopedCssBaseline
 } from '@mui/material';
 import { alpha, useTheme } from '@mui/material/styles';
+import { keyframes } from '@emotion/react';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import UnfoldLessIcon from '@mui/icons-material/UnfoldLess';
 import UnfoldMoreIcon from '@mui/icons-material/UnfoldMore';
@@ -130,6 +131,7 @@ const ContentApp = () => {
     });
     const hasMatches = highlighterState.matchesTotal > 0;
     const [computedScale, setComputedScale] = useState(1);
+    const [isInputFocused, setIsInputFocused] = useState(false);
     const getZoomLevel = useCallback(() => {
         if (window.devicePixelRatio) {
             return window.devicePixelRatio;
@@ -680,6 +682,11 @@ const ContentApp = () => {
     const overlayWidth = isMinimized ? 132 : 288;
     const headerCursor = dragStateRef.current.isDragging ? 'grabbing' : 'grab';
 
+    const marqueeAnim = keyframes`
+        0% { transform: translateX(0); }
+        100% { transform: translateX(-100%); }
+    `;
+
     return (
         <ScopedCssBaseline>
             <Paper
@@ -768,22 +775,24 @@ const ContentApp = () => {
                     >
                         <Stack spacing={2}>
                             <Stack spacing={1}>
-                                <TextField
-                                    fullWidth
-                                    size="small"
-                                    variant="outlined"
-                                    label="Regex pattern"
-                                    placeholder="Enter regex (e.g. (dog|cat))"
-                                    value={searchInput}
-                                    onChange={handleInputChange}
-                                    onKeyDown={handleInputKeyPress}
-                                    inputRef={inputRef}
-                                    error={Boolean(validationError)}
-                                    helperText={helperText}
-                                    InputProps={{
-                                        endAdornment: (
-                                            <InputAdornment position="end">
-                                                <Tooltip title={statusInfo.title} arrow>
+                                <Box sx={{ position: 'relative' }}>
+                                    <TextField
+                                        fullWidth
+                                        size="small"
+                                        variant="outlined"
+                                        label="Regex pattern"
+                                        placeholder="Enter regex (e.g. (dog|cat))"
+                                        value={searchInput}
+                                        onFocus={() => setIsInputFocused(true)}
+                                        onBlur={() => setIsInputFocused(false)}
+                                        onChange={handleInputChange}
+                                        onKeyDown={handleInputKeyPress}
+                                        inputRef={inputRef}
+                                        error={Boolean(validationError)}
+                                        helperText={helperText}
+                                        InputProps={{
+                                            endAdornment: (
+                                                <InputAdornment position="end">
                                                     <Box
                                                         sx={{
                                                             width: 12,
@@ -794,11 +803,51 @@ const ContentApp = () => {
                                                             cursor: 'help'
                                                         }}
                                                     />
-                                                </Tooltip>
-                                            </InputAdornment>
-                                        )
-                                    }}
-                                />
+                                                </InputAdornment>
+                                            )
+                                        }}
+                                        sx={{
+                                            ...(isInputFocused
+                                                ? {}
+                                                : {
+                                                    '& input': {
+                                                        color: 'transparent',
+                                                        textShadow: '0 0 0 currentColor'
+                                                    }
+                                                })
+                                        }}
+                                    />
+                                    {!isInputFocused && searchInput.trim().length > 0 && (
+                                        <Box
+                                            sx={{
+                                                pointerEvents: 'none',
+                                                position: 'absolute',
+                                                left: 12,
+                                                right: 36,
+                                                top: 3,
+                                                bottom: 26,
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                overflow: 'hidden',
+                                                color: 'text.primary',
+                                                borderRadius: 1
+                                            }}
+                                        >
+                                            <Box
+                                                sx={{
+                                                    display: 'inline-block',
+                                                    whiteSpace: 'nowrap',
+                                                    pr: 4,
+                                                    animation: `${marqueeAnim} 12s linear infinite`
+                                                }}
+                                            >
+                                                {searchInput}
+                                                <span style={{ paddingLeft: 32 }} />
+                                                {searchInput}
+                                            </Box>
+                                        </Box>
+                                    )}
+                                </Box>
                                 <Stack direction="row" spacing={1}>
                                     <Button
                                         onClick={() => void handleSearch()}
