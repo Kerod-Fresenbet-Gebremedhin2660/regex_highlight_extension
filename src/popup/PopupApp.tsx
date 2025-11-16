@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-    Alert,
     Box,
     Button,
     Collapse,
@@ -20,6 +19,7 @@ import RegexIcon from '@mui/icons-material/AutoFixHigh';
 import KeyboardIcon from '@mui/icons-material/Keyboard';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import SettingsIcon from '@mui/icons-material/Settings';
 
 type MessageResponse = {
     success: boolean;
@@ -69,8 +69,6 @@ async function sendTabMessage<T>(
 
 const PopupApp = () => {
     const theme = useTheme();
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
     const [matchPreviews, setMatchPreviews] = useState<MatchPreview[]>([]);
     const [matchState, setMatchState] = useState<{
         matchesTotal: number;
@@ -78,22 +76,6 @@ const PopupApp = () => {
         searchPattern: string;
     } | null>(null);
     const [matchPreviewExpanded, setMatchPreviewExpanded] = useState(false);
-
-    const statusMessage = useMemo(() => {
-        if (error) {
-            return { severity: 'error' as const, text: error };
-        }
-        if (isLoading) {
-            return { severity: 'info' as const, text: 'Checking widget status...' };
-        }
-        if (matchState) {
-            return { severity: 'success' as const, text: 'Widget is active on this page' };
-        }
-        return {
-            severity: 'warning' as const,
-            text: 'Widget is ready. Run a search in the widget to see matches.'
-        };
-    }, [error, isLoading, matchState]);
 
     const fetchMatchPreviews = useCallback(async (tabId: number) => {
         try {
@@ -118,32 +100,22 @@ const PopupApp = () => {
         }
     }, []);
 
-    const refreshState = useCallback(async () => {
-        setIsLoading(true);
-        setError(null);
-        try {
-            const tab = await getActiveTab();
-            if (!tab?.id) {
-                setError('No active tab found');
+    useEffect(() => {
+        // Best-effort: try to load previews if available; no status UI.
+        (async () => {
+            try {
+                const tab = await getActiveTab();
+                if (tab?.id) {
+                    await fetchMatchPreviews(tab.id);
+                } else {
+                    setMatchPreviews([]);
+                    setMatchState(null);
+                }
+            } catch {
                 setMatchPreviews([]);
                 setMatchState(null);
-                return;
             }
-
-            // Fetch match previews
-            await fetchMatchPreviews(tab.id);
-        } catch (err) {
-            console.error('Failed to get widget state', err);
-            setError('Widget not available on this page');
-            setMatchPreviews([]);
-            setMatchState(null);
-        } finally {
-            setIsLoading(false);
-        }
-    }, [fetchMatchPreviews]);
-
-    useEffect(() => {
-        void refreshState();
+        })();
 
         // Poll for match preview updates when match preview is expanded
         if (matchPreviewExpanded && matchState && matchState.matchesTotal > 0) {
@@ -160,7 +132,7 @@ const PopupApp = () => {
 
             return () => clearInterval(interval);
         }
-    }, [refreshState, matchPreviewExpanded, matchState, fetchMatchPreviews]);
+    }, [matchPreviewExpanded, matchState, fetchMatchPreviews]);
 
     const handleMatchClick = useCallback(async (matchIndex: number) => {
         try {
@@ -190,6 +162,12 @@ const PopupApp = () => {
         setMatchPreviewExpanded((prev) => !prev);
     }, []);
 
+    const openOptions = useCallback(() => {
+        if (chrome.runtime && chrome.runtime.openOptionsPage) {
+            chrome.runtime.openOptionsPage();
+        }
+    }, []);
+
     return (
         <Paper
             elevation={6}
@@ -208,6 +186,17 @@ const PopupApp = () => {
                     Regex Highlight &amp; Search
                 </Typography>
             </Stack>
+            <Box>
+                <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<SettingsIcon />}
+                    onClick={openOptions}
+                    sx={{ fontWeight: 600 }}
+                >
+                    Options
+                </Button>
+            </Box>
             <Typography variant="body2" color="text.secondary">
                 The widget appears on every page so you can:
             </Typography>
@@ -225,9 +214,6 @@ const PopupApp = () => {
                     <Typography variant="body2">Save your favourite searches for quick reuse</Typography>
                 </Stack>
             </Stack>
-            <Alert severity={statusMessage.severity} variant="outlined">
-                {statusMessage.text}
-            </Alert>
             {matchState && matchState.matchesTotal > 0 && (
                 <>
                     <Divider />
