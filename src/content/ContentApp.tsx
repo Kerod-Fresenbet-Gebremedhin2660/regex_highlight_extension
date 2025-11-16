@@ -176,7 +176,6 @@ const ContentApp = () => {
         return entries.map(([name, count]) => `${name}: ${count}`).join(', ');
     }, [highlighterState.matchTypeCounts]);
 
-    const showMiniChip = isMinimized && highlighterState.searchPattern.trim();
     const chipLabel = highlighterState.searchPattern.trim()
         ? highlighterState.matchesTotal > 0
             ? `${currentDisplayIndex}/${highlighterState.matchesTotal}`
@@ -724,6 +723,25 @@ const ContentApp = () => {
                                 Regex Highlight
                             </Typography>
                         )}
+                        {isMinimized && (
+                            <Typography
+                                variant="caption"
+                                sx={{
+                                    ml: 0.5,
+                                    px: 0.75,
+                                    py: 0.25,
+                                    borderRadius: 1,
+                                    bgcolor: 'common.white',
+                                    color: 'common.black',
+                                    border: '1px solid',
+                                    borderColor: theme.palette.grey[300],
+                                    fontWeight: 700,
+                                    lineHeight: 1.2
+                                }}
+                            >
+                                {chipLabel}
+                            </Typography>
+                        )}
                     </Stack>
                     <Stack direction="row" spacing={1}>
                         <IconButton
@@ -927,47 +945,7 @@ const ContentApp = () => {
                     </Box>
                 )}
             </Paper>
-            {showMiniChip && (
-                <Box
-                    sx={{
-                        position: 'fixed',
-                        bottom: 24,
-                        left: `${overlayPosition.left}px`,
-                        zIndex: 2147483647,
-                        pointerEvents: 'auto',
-                        transform: `scale(${computedScale})`,
-                        transformOrigin: 'bottom left'
-                    }}
-                >
-                    <Chip
-                        label={chipLabel}
-                        size="small"
-                        color={highlighterState.matchesTotal > 0 ? 'success' : 'default'}
-                        variant="filled"
-                        onClick={handleMiniChipClick}
-                        clickable
-                        title={statusInfo.title}
-                        sx={{
-                            fontWeight: 600,
-                            bgcolor:
-                                highlighterState.matchesTotal > 0
-                                    ? alpha(theme.palette.success.main, 0.9)
-                                    : alpha(theme.palette.grey[500], 0.25),
-                            color:
-                                highlighterState.matchesTotal > 0
-                                    ? theme.palette.success.contrastText
-                                    : theme.palette.text.primary,
-                            boxShadow: '0 4px 12px rgba(0,0,0,0.35)',
-                            '&:hover': {
-                                bgcolor:
-                                    highlighterState.matchesTotal > 0
-                                        ? alpha(theme.palette.success.main, 1)
-                                        : alpha(theme.palette.grey[500], 0.35)
-                            }
-                        }}
-                    />
-                </Box>
-            )}
+
         </ScopedCssBaseline>
     );
 };
