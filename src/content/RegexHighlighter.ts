@@ -1414,21 +1414,15 @@ export class RegexHighlighter {
         }
     }
 
-    applyMarkerScale(scale?: number) {
+    applyMarkerScale(_scale?: number) {
         if (!this.markerContainer) {
             return;
         }
         const container = this.markerContainer;
-        const effectiveScale = typeof scale === 'number' && scale > 0 ? scale : this.currentUIScale || 1;
-        if (this.useZoomFallback) {
-            container.style.transformOrigin = 'top right';
-            container.style.transform = `scale(${effectiveScale})`;
-            container.style.zoom = '';
-        } else {
-            container.style.transformOrigin = '';
-            container.style.transform = '';
-            container.style.zoom = `${effectiveScale}`;
-        }
+        // Let the page zoom affect the marker bar naturally; do not apply reverse scaling here.
+        container.style.transformOrigin = '';
+        container.style.transform = '';
+        container.style.zoom = '';
     }
 
     scheduleSortPatternsByMatchCount() {
