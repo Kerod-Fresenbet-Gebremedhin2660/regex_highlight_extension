@@ -4,6 +4,7 @@ import {
     Button,
     Collapse,
     Divider,
+    IconButton,
     List,
     ListItem,
     ListItemButton,
@@ -170,185 +171,197 @@ const PopupApp = () => {
 
     return (
         <Paper
-            elevation={6}
+            elevation={0}
             sx={{
-                p: 2,
-                width: 380,
-                maxWidth: '100%',
+                p: 0,
+                width: '100%',
+                height: '100vh',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: 2
             }}
         >
-            <Stack direction="row" spacing={1.5} alignItems="center">
-                <RegexIcon color="primary" />
-                <Typography variant="h6" fontWeight={700}>
-                    Regex Highlight &amp; Search
+            <Stack direction="row" spacing={1.5} alignItems="center" justifyContent="space-between" sx={{ p: 2 }}>
+                <Stack direction="row" spacing={1.5} alignItems="center">
+                    <RegexIcon color="primary" />
+                    <Typography variant="h6" fontWeight={700}>
+                        Regex Highlight &amp; Search
+                    </Typography>
+                </Stack>
+                <IconButton aria-label="Open options" onClick={openOptions} size="small">
+                    <SettingsIcon />
+                </IconButton>
+            </Stack>
+            <Divider sx={{ mx: 0, borderColor: 'common.black', opacity: 1 }} />
+            <Box sx={{ flex: 1, overflowY: 'auto' }}>
+                <Typography variant="body2" color="text.secondary" sx={{ px: 2, pt: 2 }}>
+                    The widget appears on every page so you can:
                 </Typography>
-            </Stack>
-            <Box>
-                <Button
-                    variant="outlined"
-                    size="small"
-                    startIcon={<SettingsIcon />}
-                    onClick={openOptions}
-                    sx={{ fontWeight: 600 }}
-                >
-                    Options
-                </Button>
-            </Box>
-            <Typography variant="body2" color="text.secondary">
-                The widget appears on every page so you can:
-            </Typography>
-            <Stack spacing={0.75}>
-                <Stack direction="row" spacing={1} alignItems="center">
-                    <ChevronRightIcon fontSize="small" color="primary" />
-                    <Typography variant="body2">Enter regex patterns with live validation</Typography>
+                <Stack spacing={0.75} sx={{ px: 2, pt: 1 }}>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                        <ChevronRightIcon fontSize="small" color="primary" />
+                        <Typography variant="body2">Enter regex patterns with live validation</Typography>
+                    </Stack>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                        <ChevronRightIcon fontSize="small" color="primary" />
+                        <Typography variant="body2">Highlight every match and jump between them</Typography>
+                    </Stack>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                        <ChevronRightIcon fontSize="small" color="primary" />
+                        <Typography variant="body2">Save your favourite searches for quick reuse</Typography>
+                    </Stack>
                 </Stack>
-                <Stack direction="row" spacing={1} alignItems="center">
-                    <ChevronRightIcon fontSize="small" color="primary" />
-                    <Typography variant="body2">Highlight every match and jump between them</Typography>
-                </Stack>
-                <Stack direction="row" spacing={1} alignItems="center">
-                    <ChevronRightIcon fontSize="small" color="primary" />
-                    <Typography variant="body2">Save your favourite searches for quick reuse</Typography>
-                </Stack>
-            </Stack>
-            {matchState && matchState.matchesTotal > 0 && (
-                <>
-                    <Divider />
-                    <Box>
-                        <Button
-                            variant="text"
-                            size="small"
-                            onClick={toggleMatchPreview}
-                            endIcon={matchPreviewExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                            sx={{ fontWeight: 600, width: '100%', justifyContent: 'space-between' }}
-                        >
-                            Match Preview ({matchState.matchesTotal})
-                            {matchState.currentIndex >= 0 && (
-                                <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
-                                    {matchState.currentIndex + 1} / {matchState.matchesTotal}
-                                </Typography>
-                            )}
-                        </Button>
-                        <Collapse in={matchPreviewExpanded}>
-                            <Box
-                                sx={{
-                                    mt: 1,
-                                    maxHeight: 400,
-                                    overflowY: 'auto',
-                                    border: '1px solid',
-                                    borderColor: 'divider',
-                                    borderRadius: 1,
-                                    bgcolor: 'background.default'
-                                }}
+                {matchState && matchState.matchesTotal > 0 && (
+                    <>
+                        <Divider sx={{ mx: 0, borderColor: 'common.black', opacity: 1, mt: 2 }} />
+                        <Box sx={{ px: 2, pt: 1 }}>
+                            <Button
+                                variant="text"
+                                size="small"
+                                onClick={toggleMatchPreview}
+                                endIcon={matchPreviewExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                                sx={{ fontWeight: 600, width: '100%', justifyContent: 'space-between' }}
                             >
-                                <List dense sx={{ py: 0 }}>
-                                    {matchPreviews.map((preview) => {
-                                        const isActive = preview.index === matchState.currentIndex;
-                                        return (
-                                            <ListItem
-                                                key={preview.index}
-                                                disablePadding
-                                                sx={{
-                                                    borderBottom: '1px solid',
-                                                    borderColor: 'divider',
-                                                    bgcolor: isActive
-                                                        ? alpha(theme.palette.primary.main, 0.2)
-                                                        : 'transparent',
-                                                    '&:hover': {
+                                Match Preview ({matchState.matchesTotal})
+                                {matchState.currentIndex >= 0 && (
+                                    <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                                        {matchState.currentIndex + 1} / {matchState.matchesTotal}
+                                    </Typography>
+                                )}
+                            </Button>
+                            <Collapse in={matchPreviewExpanded}>
+                                <Box
+                                    sx={{
+                                        mt: 1,
+                                        maxHeight: 400,
+                                        overflowY: 'auto',
+                                        border: '1px solid',
+                                        borderColor: 'common.black',
+                                        borderRadius: 1,
+                                        bgcolor: 'background.default'
+                                    }}
+                                >
+                                    <List dense sx={{ py: 0 }}>
+                                        {matchPreviews.map((preview) => {
+                                            const isActive = preview.index === matchState.currentIndex;
+                                            return (
+                                                <ListItem
+                                                    key={preview.index}
+                                                    disablePadding
+                                                    sx={{
+                                                        borderBottom: '1px solid',
+                                                        borderColor: 'common.black',
                                                         bgcolor: isActive
-                                                            ? alpha(theme.palette.primary.main, 0.3)
-                                                            : alpha(theme.palette.action.hover, 0.1)
-                                                    }
-                                                }}
-                                            >
-                                                <ListItemButton
-                                                    onClick={() => handleMatchClick(preview.index)}
-                                                    sx={{ py: 1, px: 1.5 }}
-                                                >
-                                                    <ListItemText
-                                                        primary={
-                                                            <Typography
-                                                                variant="caption"
-                                                                fontWeight={600}
-                                                                color="text.secondary"
-                                                                sx={{ mb: 0.5 }}
-                                                            >
-                                                                Match {preview.index + 1} of {matchState.matchesTotal}
-                                                            </Typography>
+                                                            ? alpha(theme.palette.primary.main, 0.2)
+                                                            : 'transparent',
+                                                        '&:hover': {
+                                                            bgcolor: isActive
+                                                                ? alpha(theme.palette.primary.main, 0.3)
+                                                                : alpha(theme.palette.action.hover, 0.1)
                                                         }
-                                                        secondary={
-                                                            <Typography
-                                                                variant="body2"
-                                                                sx={{
-                                                                    fontFamily: 'monospace',
-                                                                    fontSize: '0.75rem',
-                                                                    lineHeight: 1.5,
-                                                                    wordBreak: 'break-word',
-                                                                    whiteSpace: 'pre-wrap'
-                                                                }}
-                                                            >
-                                                                <span style={{ opacity: 0.6 }}>{preview.before}</span>
-                                                                <span
-                                                                    style={{
-                                                                        backgroundColor: alpha(
-                                                                            theme.palette.success.main,
-                                                                            0.3
-                                                                        ),
-                                                                        fontWeight: 600,
-                                                                        padding: '0 2px',
-                                                                        borderRadius: '2px'
+                                                    }}
+                                                >
+                                                    <ListItemButton
+                                                        onClick={() => handleMatchClick(preview.index)}
+                                                        sx={{ py: 1, px: 1.5 }}
+                                                    >
+                                                        <ListItemText
+                                                            primary={
+                                                                <Typography
+                                                                    variant="caption"
+                                                                    fontWeight={600}
+                                                                    color="text.secondary"
+                                                                    sx={{ mb: 0.5 }}
+                                                                >
+                                                                    Match {preview.index + 1} of {matchState.matchesTotal}
+                                                                </Typography>
+                                                            }
+                                                            secondary={
+                                                                <Typography
+                                                                    variant="body2"
+                                                                    sx={{
+                                                                        fontFamily: 'monospace',
+                                                                        fontSize: '0.75rem',
+                                                                        lineHeight: 1.5,
+                                                                        wordBreak: 'break-word',
+                                                                        whiteSpace: 'pre-wrap'
                                                                     }}
                                                                 >
-                                                                    {preview.match}
-                                                                </span>
-                                                                <span style={{ opacity: 0.6 }}>{preview.after}</span>
-                                                            </Typography>
-                                                        }
-                                                        primaryTypographyProps={{
-                                                            component: 'div'
-                                                        }}
-                                                        secondaryTypographyProps={{
-                                                            component: 'div'
-                                                        }}
-                                                    />
-                                                </ListItemButton>
-                                            </ListItem>
-                                        );
-                                    })}
-                                </List>
-                            </Box>
-                        </Collapse>
+                                                                    <span style={{ opacity: 0.6 }}>{preview.before}</span>
+                                                                    <span
+                                                                        style={{
+                                                                            backgroundColor: alpha(
+                                                                                theme.palette.success.main,
+                                                                                0.3
+                                                                            ),
+                                                                            fontWeight: 600,
+                                                                            padding: '0 2px',
+                                                                            borderRadius: '2px'
+                                                                        }}
+                                                                    >
+                                                                        {preview.match}
+                                                                    </span>
+                                                                    <span style={{ opacity: 0.6 }}>{preview.after}</span>
+                                                                </Typography>
+                                                            }
+                                                            primaryTypographyProps={{
+                                                                component: 'div'
+                                                            }}
+                                                            secondaryTypographyProps={{
+                                                                component: 'div'
+                                                            }}
+                                                        />
+                                                    </ListItemButton>
+                                                </ListItem>
+                                            );
+                                        })}
+                                    </List>
+                                </Box>
+                            </Collapse>
+                        </Box>
+                    </>
+                )}
+                <Divider sx={{ mx: 0, borderColor: 'common.black', opacity: 1, mt: 2 }} />
+                <Stack spacing={1} sx={{ px: 2, pt: 1, pb: 2 }}>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                        <KeyboardIcon color="primary" />
+                        <Typography variant="subtitle2" fontWeight={600}>
+                            Keyboard Shortcuts
+                        </Typography>
+                    </Stack>
+                    <Box>
+                        <Typography variant="body2" color="text.secondary">
+                            Ctrl/Cmd + Shift + F
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                            Toggle the widget (expand if minimized, minimize if open)
+                        </Typography>
                     </Box>
-                </>
-            )}
-            <Divider />
-            <Stack spacing={1}>
-                <Stack direction="row" spacing={1} alignItems="center">
-                    <KeyboardIcon color="primary" />
-                    <Typography variant="subtitle2" fontWeight={600}>
-                        Keyboard Shortcuts
-                    </Typography>
+                    <Box>
+                        <Typography variant="body2" color="text.secondary">
+                            F3 / Shift + F3
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                            Jump to the next or previous match
+                        </Typography>
+                    </Box>
                 </Stack>
-                <Box>
-                    <Typography variant="body2" color="text.secondary">
-                        Ctrl/Cmd + Shift + F
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                        Toggle the widget (expand if minimized, minimize if open)
-                    </Typography>
-                </Box>
-                <Box>
-                    <Typography variant="body2" color="text.secondary">
-                        F3 / Shift + F3
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                        Jump to the next or previous match
-                    </Typography>
-                </Box>
-            </Stack>
+            </Box>
+            <Box
+                sx={{
+                    position: 'sticky',
+                    bottom: 0,
+                    textAlign: 'center',
+                    py: 1,
+                    bgcolor: 'background.paper',
+                    borderTop: '1px solid',
+                    borderColor: 'common.black'
+                }}
+            >
+                <Typography variant="caption" color="text.secondary">
+                    Keyboard shortcuts available
+                </Typography>
+            </Box>
         </Paper>
     );
 };
