@@ -22,7 +22,7 @@ import {
 } from '@mui/material';
 import { alpha, useTheme } from '@mui/material/styles';
 import { keyframes } from '@emotion/react';
-import translateRegex, { describeSequence } from './regexDescribe';
+import translateRegex from './regexDescribe';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import UnfoldLessIcon from '@mui/icons-material/UnfoldLess';
 import UnfoldMoreIcon from '@mui/icons-material/UnfoldMore';
@@ -133,6 +133,10 @@ const ContentApp = () => {
     const hasMatches = highlighterState.matchesTotal > 0;
     const [computedScale, setComputedScale] = useState(1);
     const [isInputFocused, setIsInputFocused] = useState(false);
+    const regexTranslation = useMemo(
+        () => translateRegex(searchInput, highlighterState.regexFlags),
+        [searchInput, highlighterState.regexFlags]
+    );
 
     // Translator moved to util (regexDescribe.ts)
     const getZoomLevel = useCallback(() => {
@@ -820,7 +824,7 @@ const ContentApp = () => {
                                                 })
                                         }}
                                     />
-                                    {!isInputFocused && searchInput.trim().length > 0 && (
+                                    {!isInputFocused && regexTranslation.html && (
                                         <Box
                                             sx={{
                                                 pointerEvents: 'none',
@@ -843,11 +847,10 @@ const ContentApp = () => {
                                                     pr: 4,
                                                     animation: `${marqueeAnim} 24s linear infinite`
                                                 }}
-                                            >
-                                                {translateRegex(searchInput, highlighterState.regexFlags)}
-                                                <span style={{ paddingLeft: 32 }} />
-                                                {translateRegex(searchInput, highlighterState.regexFlags)}
-                                            </Box>
+                                                dangerouslySetInnerHTML={{
+                                                    __html: `${regexTranslation.html}<span style="padding-left: 32px;"></span>${regexTranslation.html}`
+                                                }}
+                                            />
                                         </Box>
                                     )}
                                 </Box>

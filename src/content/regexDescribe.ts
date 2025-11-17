@@ -1,5 +1,24 @@
 import type { RegexFlags } from './RegexHighlighter';
 
+const HIGHLIGHT_COLORS = [
+    '#ffecb3',
+    '#c5e1a5',
+    '#bbdefb',
+    '#f8bbd0',
+    '#d1c4e9',
+    '#ffe0b2',
+    '#b2dfdb',
+    '#d7ccc8'
+];
+
+const escapeHtml = (value: string) =>
+    value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+
 const buildFlagDescription = (flags: RegexFlags) => {
     const parts: string[] = [];
     if (flags.ignoreCase) parts.push('case-insensitive');
@@ -278,7 +297,7 @@ export const describeSequence = (seq: string, flags?: RegexFlags): string => {
     const flushRun = () => {
         if (literalRun.length === 0) return;
         const text = literalRun.map((t) => t.slice(1, -1)).join('');
-        merged.push(`'${text}'`);
+        merged.push(text);
         literalRun = [];
     };
     for (const part of out) {
@@ -294,15 +313,33 @@ export const describeSequence = (seq: string, flags?: RegexFlags): string => {
     return merged.join(', ');
 };
 
-export const translateRegex = (pattern: string, flags: RegexFlags): string => {
+export type RegexTranslation = {
+    plain: string;
+    html: string;
+};
+
+export const translateRegex = (pattern: string, flags: RegexFlags): RegexTranslation => {
     const trimmed = pattern.trim();
-    if (!trimmed) return '';
+    if (!trimmed) {
+        return { plain: '', html: '' };
+    }
     try {
         const parts = splitAlternation(trimmed).filter(Boolean);
         let desc: string;
+        let htmlDesc: string;
+        let flagSuffix = buildFlagDescription(flags);
         if (parts.length > 1) {
             const alts = parts.map((p) => describeSequence(p, flags));
+            const altHtml = alts
+                .map((text, index) => {
+                    const color = HIGHLIGHT_COLORS[index % HIGHLIGHT_COLORS.length];
+                    return `<span style="background-color: ${color}; color: #000; padding: 0 3px; border-radius: 2px; font-weight: 600;">${escapeHtml(
+                        text
+                    )}</span>`;
+                })
+                .join(' or ');
             desc = `pattern searches for ${alts.join(' or ')}`;
+            htmlDesc = `pattern searches for ${altHtml}`;
         } else {
             const body = trimmed.replace(/^\^/, '').replace(/\$$/, '');
             const anchors: string[] = [];
@@ -311,11 +348,16 @@ export const translateRegex = (pattern: string, flags: RegexFlags): string => {
             const core = describeSequence(body, flags);
             desc = `pattern searches for ${core}`;
             if (anchors.length) desc += ` (${anchors.join(', ')})`;
+            htmlDesc = escapeHtml(desc);
         }
-        desc += buildFlagDescription(flags);
-        return desc;
+        if (flagSuffix) {
+            desc += flagSuffix;
+            htmlDesc += escapeHtml(flagSuffix);
+        }
+        return { plain: desc, html: htmlDesc };
     } catch {
-        return trimmed;
+        const escaped = escapeHtml(trimmed);
+        return { plain: trimmed, html: escaped };
     }
 };
 
