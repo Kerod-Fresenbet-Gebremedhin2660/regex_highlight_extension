@@ -316,6 +316,10 @@ const ContentApp = () => {
         if (!pattern || pattern.length < 2) {
             return;
         }
+        if (containsLookaround(pattern)) {
+            setValidationError('Lookaheads/lookbehinds are disabled for performance reasons');
+            return;
+        }
         const highlighter = highlighterRef.current;
         if (!highlighter) {
             return;
@@ -373,6 +377,10 @@ const ContentApp = () => {
         inputDirtyRef.current = true;
         if (!value.trim()) {
             setValidationError(null);
+            return;
+        }
+        if (containsLookaround(value)) {
+            setValidationError('Lookaheads/lookbehinds are disabled for performance reasons');
             return;
         }
         try {
@@ -693,6 +701,25 @@ const ContentApp = () => {
         0% { transform: translateX(0); }
         100% { transform: translateX(-100%); }
     `;
+
+    const containsLookaround = useCallback((pattern: string): boolean => {
+        const targets = ['(?=', '(?!', '(?<=', '(?<!'];
+        for (let i = 0; i < pattern.length; i++) {
+            const char = pattern[i];
+            if (char === '\\') {
+                i++;
+                continue;
+            }
+            if (char === '(' && i + 2 < pattern.length && pattern[i + 1] === '?') {
+                const slice4 = pattern.slice(i, i + 4);
+                const slice3 = pattern.slice(i, i + 3);
+                if (targets.includes(slice4) || targets.includes(slice3)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }, []);
 
     return (
         <ScopedCssBaseline>

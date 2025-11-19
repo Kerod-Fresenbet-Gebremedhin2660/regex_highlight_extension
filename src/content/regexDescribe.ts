@@ -101,15 +101,9 @@ const describeAtom = (atom: string, flags?: RegexFlags): string => {
     // Named group
     const named = atom.match(/^\(\?<([A-Za-z_][A-Za-z0-9_]*)>(.*)\)$/s);
     if (named) return `group '${named[1]}' of (${describeSequence(named[2])})`;
-    // Lookaround
-    const look = atom.match(/^\(\?([!:=]|<[=!])(.*)\)$/s);
-    if (look) {
-        const tag = look[1] === ':' ? '' : (look[1] as string);
-        const inner = look[2];
-        if (tag) {
-            if (tag === '=' || tag === '!') return describeLookaround(`?${tag}`, inner);
-            if (tag === '<=' || tag === '<!') return describeLookaround(`?${tag}`, inner);
-        }
+    // Lookaround (blocked)
+    if (/^\(\?([=!]|<[=!])/.test(atom)) {
+        return 'lookaround (blocked for performance reasons)';
     }
     // Inline flags group (?i:...), (?-i:...)
     const inlineFlags = atom.match(/^\(\?([imsuSx\-]+):(.*)\)$/s);
