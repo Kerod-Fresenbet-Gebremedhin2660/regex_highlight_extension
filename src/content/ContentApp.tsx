@@ -115,7 +115,7 @@ const ContentApp = () => {
         loadBooleanSetting(PATTERN_COLLAPSIBLE_SETTING_KEY, true)
     );
     const [overlayPosition, setOverlayPosition] = useState<OverlayPosition>(() => {
-        const fallback: OverlayPosition = { top: 10, left: 36 };
+        const fallback: OverlayPosition = { top: 0, left: 36 };
         try {
             const stored = localStorage.getItem('regex-highlight-position');
             if (stored) {
@@ -204,12 +204,13 @@ const ContentApp = () => {
             if (!overlay) {
                 return;
             }
-            setOverlayPosition(position);
-            overlay.style.top = `${position.top}px`;
-            overlay.style.left = `${position.left}px`;
+            const fixedPosition = { ...position, top: 0 };
+            setOverlayPosition(fixedPosition);
+            overlay.style.top = '0px';
+            overlay.style.left = `${fixedPosition.left}px`;
             overlay.style.right = 'auto';
             overlay.style.bottom = 'auto';
-            highlighterRef.current?.saveOverlayPosition(position);
+            highlighterRef.current?.saveOverlayPosition(fixedPosition);
         },
         []
     );
@@ -280,7 +281,7 @@ const ContentApp = () => {
         const highlighter = highlighterRef.current;
         if (overlay && container && highlighter) {
             highlighter.attachOverlayElements(overlay, container);
-            overlay.style.top = `${overlayPosition.top}px`;
+            overlay.style.top = '0px';
             overlay.style.left = `${overlayPosition.left}px`;
             overlay.style.right = 'auto';
         }
@@ -530,7 +531,7 @@ const ContentApp = () => {
             const finalLeft = clamp(dragStateRef.current.startLeft + dragStateRef.current.deltaX, 0, maxLeft);
             dragStateRef.current.deltaX = 0;
             updateOverlayPosition({
-                top: overlayPosition.top,
+                top: 0,
                 left: finalLeft
             });
         };
@@ -589,12 +590,10 @@ const ContentApp = () => {
                 return;
             }
             const rect = overlay.getBoundingClientRect();
-            const maxTop = window.innerHeight - rect.height;
             const maxLeft = window.innerWidth - rect.width;
-            const newTop = clamp(rect.top, 0, Math.max(0, maxTop));
             const newLeft = clamp(rect.left, 0, Math.max(0, maxLeft));
             updateOverlayPosition({
-                top: newTop,
+                top: 0,
                 left: newLeft
             });
             highlighterRef.current?.updateUIScale();
@@ -730,7 +729,7 @@ const ContentApp = () => {
                 elevation={12}
                 sx={{
                     position: 'fixed',
-                    top: overlayPosition.top,
+                    top: 0,
                     left: overlayPosition.left,
                     right: 'auto',
                     bottom: 'auto',
@@ -740,6 +739,7 @@ const ContentApp = () => {
                     maxHeight: '85vh',
                     overflow: 'hidden',
                     border: '1px solid #000000',
+                    borderRadius: '0 0 12px 0',
                     zIndex: 2147483647
                 }}
             >
@@ -824,6 +824,7 @@ const ContentApp = () => {
                                         inputRef={inputRef}
                                         error={Boolean(validationError)}
                                         helperText={helperText}
+                                        spellCheck={false}
                                         InputProps={{
                                             endAdornment: (
                                                 <InputAdornment position="end">
@@ -846,7 +847,8 @@ const ContentApp = () => {
                                                 : {
                                                     '& input': {
                                                         color: 'transparent',
-                                                        textShadow: '0 0 0 currentColor'
+                                                        textShadow: '0 0 0 currentColor',
+                                                        caretColor: 'transparent'
                                                     }
                                                 })
                                         }}
