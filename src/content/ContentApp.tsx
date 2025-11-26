@@ -23,7 +23,7 @@ import {
 import { alpha, useTheme } from '@mui/material/styles';
 import { keyframes } from '@emotion/react';
 import translateRegex from './regexDescribe';
-import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
+import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import UnfoldLessIcon from '@mui/icons-material/UnfoldLess';
 import UnfoldMoreIcon from '@mui/icons-material/UnfoldMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
@@ -91,23 +91,13 @@ const ContentApp = () => {
     const overlayRef = useRef<HTMLDivElement | null>(null);
     const markerContainerRef = useRef<HTMLDivElement | null>(null);
     const inputRef = useRef<HTMLInputElement | null>(null);
-    const dragStateRef = useRef<{
-        isDragging: boolean;
-        startX: number;
-        startLeft: number;
-        deltaX: number;
-    }>({
-        isDragging: false,
-        startX: 0,
-        startLeft: 36,
-        deltaX: 0
-    });
     const inputDirtyRef = useRef(false);
 
     const [highlighterState, setHighlighterState] = useState<HighlighterState>(defaultState);
     const [searchInput, setSearchInput] = useState('');
     const [validationError, setValidationError] = useState<string | null>(null);
     const [isMinimized, setIsMinimized] = useState(() => loadBooleanSetting(MINIMIZED_SETTING_KEY, true));
+    const [isHidden, setIsHidden] = useState(false);
     const [flagsExpanded, setFlagsExpanded] = useState(() =>
         loadBooleanSetting(COLLAPSIBLE_SETTING_KEY, true)
     );
@@ -451,7 +441,22 @@ const ContentApp = () => {
             const key = event.key ? event.key.toLowerCase() : '';
             if ((event.ctrlKey || event.metaKey) && event.shiftKey && key === 'f') {
                 event.preventDefault();
-                if (isMinimized) {
+                if (isHidden) {
+                    setIsHidden(false);
+                    requestAnimationFrame(() => {
+                        if (inputRef.current) {
+                            const selected = window.getSelection()?.toString().trim();
+                            if (selected) {
+                                inputRef.current.value = selected;
+                                setSearchInput(selected);
+                                void handleSearch();
+                            } else {
+                                inputRef.current.focus();
+                                inputRef.current.select();
+                            }
+                        }
+                    });
+                } else if (isMinimized) {
                     setIsMinimized(false);
                     saveBooleanSetting(MINIMIZED_SETTING_KEY, false);
                     requestAnimationFrame(() => {
@@ -477,111 +482,8 @@ const ContentApp = () => {
         return () => {
             document.removeEventListener('keydown', keydownHandler, true);
         };
-    }, [handleSearch, isMinimized]);
+    }, [handleSearch, isMinimized, isHidden]);
 
-    useEffect(() => {
-        const overlay = overlayRef.current;
-        if (!overlay) {
-            return;
-        }
-        const dragHandle = overlay.querySelector('.regex-drag-handle') as HTMLElement | null;
-        if (!dragHandle) {
-            return;
-        }
-
-        const startDrag = (clientX: number) => {
-            if (!overlay) return;
-            dragStateRef.current.isDragging = true;
-            dragStateRef.current.startX = clientX;
-            dragStateRef.current.startLeft = overlayPosition.left;
-            dragStateRef.current.deltaX = 0;
-            overlay.style.transition = 'none';
-        };
-
-        const handleMouseDown = (event: MouseEvent) => {
-            const target = event.target as HTMLElement;
-            if (target.closest('#regex-minimize-btn')) {
-                return;
-            }
-            startDrag(event.clientX);
-            event.preventDefault();
-        };
-
-        const handleMouseMove = (event: MouseEvent) => {
-            if (!dragStateRef.current.isDragging || !overlay) {
-                return;
-            }
-            const deltaX = event.clientX - dragStateRef.current.startX;
-            const width = overlay.getBoundingClientRect().width;
-            const maxLeft = Math.max(0, window.innerWidth - width);
-            const newLeft = clamp(dragStateRef.current.startLeft + deltaX, 0, maxLeft);
-            dragStateRef.current.deltaX = newLeft - dragStateRef.current.startLeft;
-            overlay.style.left = `${newLeft}px`;
-            overlay.style.right = 'auto';
-        };
-
-        const endDrag = () => {
-            if (!dragStateRef.current.isDragging || !overlay) {
-                return;
-            }
-            dragStateRef.current.isDragging = false;
-            overlay.style.transition = '';
-            const width = overlay.getBoundingClientRect().width;
-            const maxLeft = Math.max(0, window.innerWidth - width);
-            const finalLeft = clamp(dragStateRef.current.startLeft + dragStateRef.current.deltaX, 0, maxLeft);
-            dragStateRef.current.deltaX = 0;
-            updateOverlayPosition({
-                top: 0,
-                left: finalLeft
-            });
-        };
-
-        dragHandle.addEventListener('mousedown', handleMouseDown);
-        document.addEventListener('mousemove', handleMouseMove);
-        document.addEventListener('mouseup', endDrag);
-
-        const handleTouchStart = (event: TouchEvent) => {
-            const target = event.target as HTMLElement;
-            if (target.closest('#regex-minimize-btn')) {
-                return;
-            }
-            const touch = event.touches[0];
-            startDrag(touch.clientX);
-            event.preventDefault();
-        };
-
-        const handleTouchMove = (event: TouchEvent) => {
-            if (!dragStateRef.current.isDragging || !overlay) {
-                return;
-            }
-            const touch = event.touches[0];
-            const deltaX = touch.clientX - dragStateRef.current.startX;
-            const width = overlay.getBoundingClientRect().width;
-            const maxLeft = Math.max(0, window.innerWidth - width);
-            const newLeft = clamp(dragStateRef.current.startLeft + deltaX, 0, maxLeft);
-            dragStateRef.current.deltaX = newLeft - dragStateRef.current.startLeft;
-            overlay.style.left = `${newLeft}px`;
-            overlay.style.right = 'auto';
-            event.preventDefault();
-        };
-
-        const handleTouchEnd = () => {
-            endDrag();
-        };
-
-        dragHandle.addEventListener('touchstart', handleTouchStart, { passive: false });
-        document.addEventListener('touchmove', handleTouchMove, { passive: false });
-        document.addEventListener('touchend', handleTouchEnd);
-
-        return () => {
-            dragHandle.removeEventListener('mousedown', handleMouseDown);
-            document.removeEventListener('mousemove', handleMouseMove);
-            document.removeEventListener('mouseup', endDrag);
-            dragHandle.removeEventListener('touchstart', handleTouchStart);
-            document.removeEventListener('touchmove', handleTouchMove);
-            document.removeEventListener('touchend', handleTouchEnd);
-        };
-    }, [overlayPosition.left, overlayPosition.top, updateOverlayPosition]);
 
     useEffect(() => {
         const handleResize = () => {
@@ -694,7 +596,10 @@ const ContentApp = () => {
 
     const helperText = validationError ? `Invalid regex: ${validationError}` : ' ';
     const overlayWidth = isMinimized ? 132 : 288;
-    const headerCursor = dragStateRef.current.isDragging ? 'grabbing' : 'grab';
+
+    const handleHide = useCallback(() => {
+        setIsHidden(true);
+    }, []);
 
     const marqueeAnim = keyframes`
         0% { transform: translateX(0); }
@@ -733,7 +638,7 @@ const ContentApp = () => {
                     left: overlayPosition.left,
                     right: 'auto',
                     bottom: 'auto',
-                    display: 'flex',
+                    display: isHidden ? 'none' : 'flex',
                     flexDirection: 'column',
                     width: overlayWidth,
                     maxHeight: '85vh',
@@ -744,7 +649,6 @@ const ContentApp = () => {
                 }}
             >
                 <Box
-                    className="regex-drag-handle"
                     sx={{
                         display: 'flex',
                         alignItems: 'center',
@@ -753,12 +657,10 @@ const ContentApp = () => {
                         py: 0.75,
                         bgcolor: 'primary.main',
                         color: 'primary.contrastText',
-                        cursor: headerCursor,
                         userSelect: 'none'
                     }}
                 >
                     <Stack direction="row" spacing={1} alignItems="center">
-                        <DragIndicatorIcon fontSize="small" />
                         {!isMinimized && (
                             <Typography variant="subtitle2" fontWeight={600}>
                                 Regex Highlight
@@ -785,6 +687,18 @@ const ContentApp = () => {
                         )}
                     </Stack>
                     <Stack direction="row" spacing={1}>
+                        <IconButton
+                            size="small"
+                            color="inherit"
+                            onClick={handleHide}
+                            aria-label="Hide widget"
+                            sx={{
+                                bgcolor: 'rgba(255,255,255,0.15)',
+                                '&:hover': { bgcolor: 'rgba(255,255,255,0.3)' }
+                            }}
+                        >
+                            <VisibilityOffIcon fontSize="small" />
+                        </IconButton>
                         <IconButton
                             size="small"
                             color="inherit"
