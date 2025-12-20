@@ -1021,7 +1021,23 @@ export class RegexHighlighter {
             '#ab47bc',
             '#ffa726',
             '#26a69a',
-            '#8d6e63'
+            '#8d6e63',
+            '#ffee58',
+            '#9ccc65',
+            '#29b6f6',
+            '#f06292',
+            '#ba68c8',
+            '#ff8a65',
+            '#66bb6a',
+            '#90a4ae',
+            '#ffca28',
+            '#8bc34a',
+            '#03a9f4',
+            '#e91e63',
+            '#9c27b0',
+            '#ff7043',
+            '#009688',
+            '#795548'
         ];
         return colors[typeIndex % colors.length];
     }

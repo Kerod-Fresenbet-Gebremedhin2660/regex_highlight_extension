@@ -49,6 +49,70 @@
     background-color: #d7ccc8 !important;
 }
 
+.regex-highlight-type-8 {
+    background-color: #fff9c4 !important;
+}
+
+.regex-highlight-type-9 {
+    background-color: #dcedc8 !important;
+}
+
+.regex-highlight-type-10 {
+    background-color: #b3e5fc !important;
+}
+
+.regex-highlight-type-11 {
+    background-color: #f8bbd0 !important;
+}
+
+.regex-highlight-type-12 {
+    background-color: #e1bee7 !important;
+}
+
+.regex-highlight-type-13 {
+    background-color: #ffccbc !important;
+}
+
+.regex-highlight-type-14 {
+    background-color: #c8e6c9 !important;
+}
+
+.regex-highlight-type-15 {
+    background-color: #cfd8dc !important;
+}
+
+.regex-highlight-type-16 {
+    background-color: #ffe082 !important;
+}
+
+.regex-highlight-type-17 {
+    background-color: #aed581 !important;
+}
+
+.regex-highlight-type-18 {
+    background-color: #81d4fa !important;
+}
+
+.regex-highlight-type-19 {
+    background-color: #f48fb1 !important;
+}
+
+.regex-highlight-type-20 {
+    background-color: #ce93d8 !important;
+}
+
+.regex-highlight-type-21 {
+    background-color: #ffab91 !important;
+}
+
+.regex-highlight-type-22 {
+    background-color: #80cbc4 !important;
+}
+
+.regex-highlight-type-23 {
+    background-color: #bcaaa4 !important;
+}
+
 .regex-scrollbar-markers {
     position: fixed;
     right: 16px;
@@ -114,4 +178,68 @@
 
 .regex-scrollbar-marker-type-7 {
     background-color: #8d6e63;
+}
+
+.regex-scrollbar-marker-type-8 {
+    background-color: #ffee58;
+}
+
+.regex-scrollbar-marker-type-9 {
+    background-color: #9ccc65;
+}
+
+.regex-scrollbar-marker-type-10 {
+    background-color: #29b6f6;
+}
+
+.regex-scrollbar-marker-type-11 {
+    background-color: #f06292;
+}
+
+.regex-scrollbar-marker-type-12 {
+    background-color: #ba68c8;
+}
+
+.regex-scrollbar-marker-type-13 {
+    background-color: #ff8a65;
+}
+
+.regex-scrollbar-marker-type-14 {
+    background-color: #66bb6a;
+}
+
+.regex-scrollbar-marker-type-15 {
+    background-color: #90a4ae;
+}
+
+.regex-scrollbar-marker-type-16 {
+    background-color: #ffca28;
+}
+
+.regex-scrollbar-marker-type-17 {
+    background-color: #8bc34a;
+}
+
+.regex-scrollbar-marker-type-18 {
+    background-color: #03a9f4;
+}
+
+.regex-scrollbar-marker-type-19 {
+    background-color: #e91e63;
+}
+
+.regex-scrollbar-marker-type-20 {
+    background-color: #9c27b0;
+}
+
+.regex-scrollbar-marker-type-21 {
+    background-color: #ff7043;
+}
+
+.regex-scrollbar-marker-type-22 {
+    background-color: #009688;
+}
+
+.regex-scrollbar-marker-type-23 {
+    background-color: #795548;
 }

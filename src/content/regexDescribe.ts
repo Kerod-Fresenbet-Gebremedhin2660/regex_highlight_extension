@@ -8,7 +8,23 @@ const HIGHLIGHT_COLORS = [
     '#d1c4e9',
     '#ffe0b2',
     '#b2dfdb',
-    '#d7ccc8'
+    '#d7ccc8',
+    '#fff9c4',
+    '#dcedc8',
+    '#b3e5fc',
+    '#f8bbd0',
+    '#e1bee7',
+    '#ffccbc',
+    '#c8e6c9',
+    '#cfd8dc',
+    '#ffe082',
+    '#aed581',
+    '#81d4fa',
+    '#f48fb1',
+    '#ce93d8',
+    '#ffab91',
+    '#80cbc4',
+    '#bcaaa4'
 ];
 
 const escapeHtml = (value: string) =>
