@@ -5,8 +5,13 @@
     "description": "Highlight and search text on web pages using regex patterns with navigation controls",
     "permissions": [
         "activeTab",
-        "storage"
+        "storage",
+        "contextMenus"
     ],
+    "background": {
+        "service_worker": "assets/background.js",
+        "type": "module"
+    },
     "content_scripts": [
         {
             "matches": [

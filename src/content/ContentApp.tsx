@@ -506,9 +506,62 @@ const ContentApp = () => {
         };
     }, [overlayPosition.left, updateOverlayPosition]);
 
+    // Helper to escape regex special characters for literal matching
+    const escapeRegexChars = useCallback((text: string): string => {
+        return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }, []);
+
+    // Handle adding alternation from context menu
+    const handleAddAlternation = useCallback((text: string) => {
+        const escapedText = escapeRegexChars(text);
+        // Get current pattern from the input ref to avoid stale closure issues
+        const currentPattern = (inputRef.current?.value ?? searchInput).trim();
+
+        let newPattern: string;
+        if (!currentPattern) {
+            // No existing pattern - start with just the selected text
+            newPattern = escapedText;
+        } else {
+            // Add as alternation - wrap if needed
+            // Check if current pattern is already an alternation group
+            if (currentPattern.startsWith('(') && currentPattern.endsWith(')')) {
+                // Insert before closing paren
+                newPattern = currentPattern.slice(0, -1) + '|' + escapedText + ')';
+            } else if (currentPattern.includes('|')) {
+                // Already has alternation, wrap it all
+                newPattern = '(' + currentPattern + '|' + escapedText + ')';
+            } else {
+                // Single pattern, create alternation group
+                newPattern = '(' + currentPattern + '|' + escapedText + ')';
+            }
+        }
+
+        // Update both state and DOM
+        setSearchInput(newPattern);
+        if (inputRef.current) {
+            inputRef.current.value = newPattern;
+        }
+        inputDirtyRef.current = true;
+        setValidationError(null);
+
+        // Show the widget if hidden
+        if (isHidden) {
+            setIsHidden(false);
+        }
+        if (isMinimized) {
+            setIsMinimized(false);
+            saveBooleanSetting(MINIMIZED_SETTING_KEY, false);
+        }
+
+        // Auto-search if pattern is long enough
+        if (newPattern.length >= 2) {
+            void highlighterRef.current?.search(newPattern);
+        }
+    }, [searchInput, escapeRegexChars, isHidden, isMinimized]);
+
     useEffect(() => {
         const messageHandler = (
-            message: { action: string; pattern?: string; matchIndex?: number },
+            message: { action: string; pattern?: string; matchIndex?: number; text?: string },
             _sender: chrome.runtime.MessageSender,
             sendResponse: (response: any) => void
         ) => {
@@ -556,6 +609,14 @@ const ContentApp = () => {
                         sendResponse({ success: false });
                     }
                     return true;
+                case 'addAlternation':
+                    if (message.text) {
+                        handleAddAlternation(message.text);
+                        sendResponse({ success: true });
+                    } else {
+                        sendResponse({ success: false });
+                    }
+                    return true;
                 default:
                     break;
             }
@@ -567,7 +628,7 @@ const ContentApp = () => {
         return () => {
             chrome.runtime.onMessage.removeListener(messageHandler);
         };
-    }, [highlighterState]);
+    }, [highlighterState, handleAddAlternation]);
 
     const renderPatternHistory = () => {
         if (!highlighterState.savedPatterns.length) {

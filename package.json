@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && npm run build:popup && npm run build:content",
+    "build": "tsc && npm run build:popup && npm run build:content && npm run build:background",
     "build:popup": "vite build --config vite.config.ts",
     "build:content": "vite build --config vite.content.config.ts",
+    "build:background": "vite build --config vite.background.config.ts",
     "preview": "vite preview"
   },
   "repository": {
