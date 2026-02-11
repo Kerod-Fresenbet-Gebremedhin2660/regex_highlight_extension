@@ -128,6 +128,96 @@ const ContentApp = () => {
         [searchInput, highlighterState.regexFlags]
     );
 
+    const containsLookaround = useCallback((pattern: string): boolean => {
+        const targets = ['(?=', '(?!', '(?<=', '(?<!'];
+        for (let i = 0; i < pattern.length; i++) {
+            const char = pattern[i];
+            if (char === '\\') {
+                i++;
+                continue;
+            }
+            if (char === '(' && i + 2 < pattern.length && pattern[i + 1] === '?') {
+                const slice4 = pattern.slice(i, i + 4);
+                const slice3 = pattern.slice(i, i + 3);
+                if (targets.includes(slice4) || targets.includes(slice3)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }, []);
+
+    // Check if a pattern part already has word boundaries at start and end
+    const hasWordBoundaries = useCallback((part: string): boolean => {
+        // Check if starts with \b and ends with \b
+        const startsWithBoundary = part.startsWith('\\b');
+        const endsWithBoundary = part.endsWith('\\b');
+        return startsWithBoundary && endsWithBoundary;
+    }, []);
+
+    const wrapWithWordBoundaries = useCallback((pattern: string): string => {
+        // Split by top-level alternation (|) and wrap each item individually
+        // Only add word boundaries to items that don't already have them
+        const parts: string[] = [];
+        let current = '';
+        let depth = 0; // Track nesting depth for groups () and character classes []
+        let inCharClass = false;
+
+        for (let i = 0; i < pattern.length; i++) {
+            const char = pattern[i];
+
+            // Handle escape sequences
+            if (char === '\\' && i + 1 < pattern.length) {
+                current += char + pattern[i + 1];
+                i++;
+                continue;
+            }
+
+            // Track character class
+            if (char === '[' && !inCharClass) {
+                inCharClass = true;
+                current += char;
+                continue;
+            }
+            if (char === ']' && inCharClass) {
+                inCharClass = false;
+                current += char;
+                continue;
+            }
+
+            // Track group nesting (only outside character classes)
+            if (!inCharClass) {
+                if (char === '(') {
+                    depth++;
+                } else if (char === ')') {
+                    depth--;
+                }
+            }
+
+            // Split on top-level pipe
+            if (char === '|' && depth === 0 && !inCharClass) {
+                parts.push(current);
+                current = '';
+                continue;
+            }
+
+            current += char;
+        }
+
+        // Don't forget the last part
+        if (current) {
+            parts.push(current);
+        }
+
+        // Wrap each part with word boundaries only if not already present
+        return parts.map(part => {
+            if (hasWordBoundaries(part)) {
+                return part; // Already has word boundaries
+            }
+            return `\\b${part}\\b`;
+        }).join('|');
+    }, [hasWordBoundaries]);
+
     // Translator moved to util (regexDescribe.ts)
     const getZoomLevel = useCallback(() => {
         if (window.devicePixelRatio) {
@@ -317,13 +407,15 @@ const ContentApp = () => {
         }
         setValidationError(null);
         try {
-            await highlighter.search(pattern);
+            // Always apply word boundaries (smart - only adds if not already present)
+            const searchPattern = wrapWithWordBoundaries(pattern);
+            await highlighter.search(searchPattern);
             inputDirtyRef.current = false;
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Invalid regex pattern';
             setValidationError(message);
         }
-    }, [searchInput]);
+    }, [searchInput, wrapWithWordBoundaries]);
 
     const handleClear = useCallback(async () => {
         const highlighter = highlighterRef.current;
@@ -400,6 +492,17 @@ const ContentApp = () => {
         [handleSearch]
     );
 
+    const focusInputAtEnd = useCallback(() => {
+        if (!inputRef.current) {
+            return;
+        }
+        inputRef.current.focus();
+        const end = inputRef.current.value.length;
+        requestAnimationFrame(() => {
+            inputRef.current?.setSelectionRange(end, end);
+        });
+    }, []);
+
     const toggleMinimize = useCallback(() => {
         setIsMinimized((prev) => {
             const next = !prev;
@@ -417,7 +520,6 @@ const ContentApp = () => {
         setPatternsExpanded(expanded);
         saveBooleanSetting(PATTERN_COLLAPSIBLE_SETTING_KEY, expanded);
     }, []);
-
 
     const handlePatternChipClick = useCallback((pattern: string) => {
         setSearchInput(pattern);
@@ -449,10 +551,10 @@ const ContentApp = () => {
                             if (selected) {
                                 inputRef.current.value = selected;
                                 setSearchInput(selected);
+                                focusInputAtEnd();
                                 void handleSearch();
                             } else {
-                                inputRef.current.focus();
-                                inputRef.current.select();
+                                focusInputAtEnd();
                             }
                         }
                     });
@@ -465,10 +567,10 @@ const ContentApp = () => {
                             if (selected) {
                                 inputRef.current.value = selected;
                                 setSearchInput(selected);
+                                focusInputAtEnd();
                                 void handleSearch();
                             } else {
-                                inputRef.current.focus();
-                                inputRef.current.select();
+                                focusInputAtEnd();
                             }
                         }
                     });
@@ -482,7 +584,7 @@ const ContentApp = () => {
         return () => {
             document.removeEventListener('keydown', keydownHandler, true);
         };
-    }, [handleSearch, isMinimized, isHidden]);
+    }, [focusInputAtEnd, handleSearch, isMinimized, isHidden]);
 
 
     useEffect(() => {
@@ -522,18 +624,8 @@ const ContentApp = () => {
             // No existing pattern - start with just the selected text
             newPattern = escapedText;
         } else {
-            // Add as alternation - wrap if needed
-            // Check if current pattern is already an alternation group
-            if (currentPattern.startsWith('(') && currentPattern.endsWith(')')) {
-                // Insert before closing paren
-                newPattern = currentPattern.slice(0, -1) + '|' + escapedText + ')';
-            } else if (currentPattern.includes('|')) {
-                // Already has alternation, wrap it all
-                newPattern = '(' + currentPattern + '|' + escapedText + ')';
-            } else {
-                // Single pattern, create alternation group
-                newPattern = '(' + currentPattern + '|' + escapedText + ')';
-            }
+            // Add as alternation (no parentheses)
+            newPattern = currentPattern + '|' + escapedText;
         }
 
         // Update both state and DOM
@@ -544,20 +636,17 @@ const ContentApp = () => {
         inputDirtyRef.current = true;
         setValidationError(null);
 
-        // Show the widget if hidden
+        // Show the widget if hidden (but don't change minimized state)
         if (isHidden) {
             setIsHidden(false);
         }
-        if (isMinimized) {
-            setIsMinimized(false);
-            saveBooleanSetting(MINIMIZED_SETTING_KEY, false);
-        }
 
-        // Auto-search if pattern is long enough
+        // Auto-search if pattern is long enough (always apply smart word boundaries)
         if (newPattern.length >= 2) {
-            void highlighterRef.current?.search(newPattern);
+            const searchPattern = wrapWithWordBoundaries(newPattern);
+            void highlighterRef.current?.search(searchPattern);
         }
-    }, [searchInput, escapeRegexChars, isHidden, isMinimized]);
+    }, [searchInput, escapeRegexChars, isHidden, wrapWithWordBoundaries]);
 
     useEffect(() => {
         const messageHandler = (
@@ -624,9 +713,17 @@ const ContentApp = () => {
             return false;
         };
 
-        chrome.runtime.onMessage.addListener(messageHandler);
+        try {
+            chrome.runtime.onMessage.addListener(messageHandler);
+        } catch {
+            // Extension context may be invalidated
+        }
         return () => {
-            chrome.runtime.onMessage.removeListener(messageHandler);
+            try {
+                chrome.runtime.onMessage.removeListener(messageHandler);
+            } catch {
+                // Extension context may be invalidated
+            }
         };
     }, [highlighterState, handleAddAlternation]);
 
@@ -666,25 +763,6 @@ const ContentApp = () => {
         0% { transform: translateX(0); }
         100% { transform: translateX(-100%); }
     `;
-
-    const containsLookaround = useCallback((pattern: string): boolean => {
-        const targets = ['(?=', '(?!', '(?<=', '(?<!'];
-        for (let i = 0; i < pattern.length; i++) {
-            const char = pattern[i];
-            if (char === '\\') {
-                i++;
-                continue;
-            }
-            if (char === '(' && i + 2 < pattern.length && pattern[i + 1] === '?') {
-                const slice4 = pattern.slice(i, i + 4);
-                const slice3 = pattern.slice(i, i + 3);
-                if (targets.includes(slice4) || targets.includes(slice3)) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }, []);
 
     return (
         <ScopedCssBaseline>
@@ -792,7 +870,10 @@ const ContentApp = () => {
                                         label="Regex pattern"
                                         placeholder="Enter regex (e.g. (dog|cat))"
                                         value={searchInput}
-                                        onFocus={() => setIsInputFocused(true)}
+                                        onFocus={() => {
+                                            setIsInputFocused(true);
+                                            focusInputAtEnd();
+                                        }}
                                         onBlur={() => setIsInputFocused(false)}
                                         onChange={handleInputChange}
                                         onKeyDown={handleInputKeyPress}

@@ -1153,19 +1153,27 @@ export class RegexHighlighter {
             flags: this.regexFlags,
             timestamp: Date.now()
         };
-        chrome.storage.local.set({ [SEARCH_STATE_KEY]: state }, () => {
-            if (chrome.runtime.lastError) {
-                console.warn('Could not save search state:', chrome.runtime.lastError);
-            }
-        });
+        try {
+            chrome.storage.local.set({ [SEARCH_STATE_KEY]: state }, () => {
+                if (chrome.runtime.lastError) {
+                    // Extension context may be invalidated
+                }
+            });
+        } catch {
+            // Extension context invalidated
+        }
     }
 
     private clearSearchState() {
-        chrome.storage.local.remove(SEARCH_STATE_KEY, () => {
-            if (chrome.runtime.lastError) {
-                console.warn('Could not clear search state:', chrome.runtime.lastError);
-            }
-        });
+        try {
+            chrome.storage.local.remove(SEARCH_STATE_KEY, () => {
+                if (chrome.runtime.lastError) {
+                    // Extension context may be invalidated
+                }
+            });
+        } catch {
+            // Extension context invalidated
+        }
     }
 
     private getDomain() {
@@ -1228,33 +1236,41 @@ export class RegexHighlighter {
                 clearTimeout(navigationTimeout);
             }
 
-            chrome.storage.local.get(SEARCH_STATE_KEY, (result) => {
-                const state = result[SEARCH_STATE_KEY] as
-                    | {
-                        pattern: string;
-                        domain: string;
-                        flags: RegexFlags;
+            try {
+                chrome.storage.local.get(SEARCH_STATE_KEY, (result) => {
+                    if (chrome.runtime.lastError) {
+                        // Extension context may be invalidated
+                        return;
                     }
-                    | undefined;
-                if (!state) {
-                    return;
-                }
-                if (state.domain !== currentDomain) {
-                    this.clearSearchState();
-                    void this.clearHighlights();
-                    this.searchPattern = '';
-                    this.notifyStateChange();
-                    return;
-                }
-                navigationTimeout = setTimeout(() => {
-                    this.searchPattern = state.pattern;
-                    if (state.flags) {
-                        this.regexFlags = { ...this.regexFlags, ...state.flags };
+                    const state = result[SEARCH_STATE_KEY] as
+                        | {
+                            pattern: string;
+                            domain: string;
+                            flags: RegexFlags;
+                        }
+                        | undefined;
+                    if (!state) {
+                        return;
                     }
-                    this.notifyStateChange();
-                    void this.rerunActiveSearch();
-                }, 300);
-            });
+                    if (state.domain !== currentDomain) {
+                        this.clearSearchState();
+                        void this.clearHighlights();
+                        this.searchPattern = '';
+                        this.notifyStateChange();
+                        return;
+                    }
+                    navigationTimeout = setTimeout(() => {
+                        this.searchPattern = state.pattern;
+                        if (state.flags) {
+                            this.regexFlags = { ...this.regexFlags, ...state.flags };
+                        }
+                        this.notifyStateChange();
+                        void this.rerunActiveSearch();
+                    }, 300);
+                });
+            } catch {
+                // Extension context invalidated
+            }
         };
 
         // Handle DOM changes that might indicate SPA navigation

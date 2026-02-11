@@ -140,5 +140,3 @@ const OptionsApp = () => {
 };
 
 export default OptionsApp;
-
-
