@@ -72,6 +72,7 @@ export class RegexHighlighter {
     private overlayElement: HTMLElement | null = null;
     private markerContainer: HTMLElement | null = null;
     private navigationCleanup?: () => void;
+    private patternStorageListener?: (changes: { [key: string]: chrome.storage.StorageChange }, areaName: string) => void;
 
     constructor(callbacks: CallbackEvents = {}) {
         this.callbacks = callbacks;
@@ -83,6 +84,7 @@ export class RegexHighlighter {
             multiline: this.loadSetting('regexFlagMultiline', false),
             dotAll: this.loadSetting('regexFlagDotAll', false)
         };
+        this.initializeSavedPatternsSync();
         this.initWorker();
         this.setupZoomHandling();
         this.setupNavigationListener();
@@ -118,6 +120,13 @@ export class RegexHighlighter {
         }
         if (this.navigationCleanup) {
             this.navigationCleanup();
+        }
+        if (this.patternStorageListener) {
+            try {
+                chrome.storage.onChanged.removeListener(this.patternStorageListener);
+            } catch {
+                // Extension context may be invalidated
+            }
         }
     }
 
@@ -374,11 +383,7 @@ export class RegexHighlighter {
             return;
         }
         this.savedPatterns.splice(index, 1);
-        try {
-            localStorage.setItem(PATTERN_STORAGE_KEY, JSON.stringify(this.savedPatterns));
-        } catch (error) {
-            console.warn('Could not save patterns to localStorage', error);
-        }
+        this.persistSavedPatterns();
         this.notifyStateChange();
     }
 
@@ -1108,11 +1113,7 @@ export class RegexHighlighter {
         if (this.savedPatterns.length > this.maxSavedPatterns) {
             this.savedPatterns = this.savedPatterns.slice(0, this.maxSavedPatterns);
         }
-        try {
-            localStorage.setItem(PATTERN_STORAGE_KEY, JSON.stringify(this.savedPatterns));
-        } catch (error) {
-            console.warn('Could not save pattern to localStorage', error);
-        }
+        this.persistSavedPatterns();
         this.notifyStateChange();
     }
 
@@ -1123,6 +1124,69 @@ export class RegexHighlighter {
         } catch (error) {
             console.warn('Could not load saved patterns', error);
             return [];
+        }
+    }
+
+    private initializeSavedPatternsSync() {
+        try {
+            chrome.storage.local.get(PATTERN_STORAGE_KEY, (result) => {
+                if (chrome.runtime.lastError) {
+                    // Extension context may be invalidated
+                    return;
+                }
+                const saved = result?.[PATTERN_STORAGE_KEY];
+                if (Array.isArray(saved)) {
+                    this.savedPatterns = saved
+                        .filter((value): value is string => typeof value === 'string')
+                        .slice(0, this.maxSavedPatterns);
+                    this.notifyStateChange();
+                    return;
+                }
+                // First run migration: seed chrome.storage.local from existing localStorage.
+                if (this.savedPatterns.length > 0) {
+                    this.persistSavedPatterns();
+                }
+            });
+
+            this.patternStorageListener = (
+                changes: { [key: string]: chrome.storage.StorageChange },
+                areaName: string
+            ) => {
+                if (areaName !== 'local' || !changes[PATTERN_STORAGE_KEY]) {
+                    return;
+                }
+                const nextValue = changes[PATTERN_STORAGE_KEY].newValue;
+                if (!Array.isArray(nextValue)) {
+                    this.savedPatterns = [];
+                    this.notifyStateChange();
+                    return;
+                }
+                this.savedPatterns = nextValue
+                    .filter((value): value is string => typeof value === 'string')
+                    .slice(0, this.maxSavedPatterns);
+                this.notifyStateChange();
+            };
+            chrome.storage.onChanged.addListener(this.patternStorageListener);
+        } catch {
+            // Extension context may be invalidated
+        }
+    }
+
+    private persistSavedPatterns() {
+        // Keep localStorage write for compatibility with existing code paths/migration fallback.
+        try {
+            localStorage.setItem(PATTERN_STORAGE_KEY, JSON.stringify(this.savedPatterns));
+        } catch (error) {
+            console.warn('Could not save patterns to localStorage', error);
+        }
+        try {
+            chrome.storage.local.set({ [PATTERN_STORAGE_KEY]: this.savedPatterns }, () => {
+                if (chrome.runtime.lastError) {
+                    // Extension context may be invalidated
+                }
+            });
+        } catch {
+            // Extension context may be invalidated
         }
     }
 
@@ -1498,7 +1562,7 @@ export class RegexHighlighter {
             }));
             patternWithCounts.sort((a, b) => b.count - a.count);
             this.savedPatterns = patternWithCounts.map((item) => item.pattern);
-            localStorage.setItem(PATTERN_STORAGE_KEY, JSON.stringify(this.savedPatterns));
+            this.persistSavedPatterns();
             this.notifyStateChange();
         } catch (error) {
             console.warn('Could not sort patterns by match count:', error);
