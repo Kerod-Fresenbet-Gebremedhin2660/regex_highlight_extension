@@ -265,6 +265,23 @@ const ContentApp = () => {
         return entries.map(([name, count]) => `${name}: ${count}`).join(', ');
     }, [highlighterState.matchTypeCounts]);
 
+    const highlightedNavigationItems = useMemo(
+        () =>
+            regexTranslation.items.map((item) => {
+                const matchTypeName = highlighterState.matchTypes[item.index];
+                return {
+                    ...item,
+                    count: matchTypeName ? highlighterState.matchTypeCounts[matchTypeName] ?? 0 : 0
+                };
+            }),
+        [highlighterState.matchTypeCounts, highlighterState.matchTypes, regexTranslation.items]
+    );
+
+    const handleHighlightedItemClick = useCallback((event: React.MouseEvent<HTMLAnchorElement>, itemIndex: number) => {
+        event.preventDefault();
+        highlighterRef.current?.jumpToFirstMatchType(itemIndex);
+    }, []);
+
     const chipLabel = highlighterState.searchPattern.trim()
         ? highlighterState.matchesTotal > 0
             ? `${currentDisplayIndex}/${highlighterState.matchesTotal}`
@@ -995,6 +1012,66 @@ const ContentApp = () => {
                                 }
                                 label="Scroll to first match on search"
                             />
+                            {highlightedNavigationItems.length > 0 && (
+                                <Box>
+                                    <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                                        Jump to highlighted item
+                                    </Typography>
+                                    <Stack
+                                        direction="row"
+                                        spacing={1}
+                                        useFlexGap
+                                        sx={{
+                                            flexWrap: 'wrap',
+                                            mt: 0.75
+                                        }}
+                                    >
+                                        {highlightedNavigationItems.map((item) => (
+                                            <Button
+                                                component="a"
+                                                href={`#regex-highlight-item-${item.index}`}
+                                                key={`${item.index}-${item.pattern}`}
+                                                size="small"
+                                                variant="outlined"
+                                                disabled={item.count === 0}
+                                                onClick={(event) => handleHighlightedItemClick(event, item.index)}
+                                                sx={{
+                                                    minHeight: 28,
+                                                    maxWidth: '100%',
+                                                    px: 1,
+                                                    py: 0.25,
+                                                    borderColor: alpha(item.color, 0.8),
+                                                    bgcolor: item.count > 0 ? item.color : alpha(item.color, 0.16),
+                                                    color: '#000',
+                                                    fontWeight: 700,
+                                                    textTransform: 'none',
+                                                    '&:hover': {
+                                                        bgcolor: item.color,
+                                                        borderColor: item.color
+                                                    },
+                                                    '&.Mui-disabled': {
+                                                        borderColor: alpha(item.color, 0.36),
+                                                        bgcolor: alpha(item.color, 0.16),
+                                                        color: 'text.disabled'
+                                                    }
+                                                }}
+                                            >
+                                                <Typography
+                                                    component="span"
+                                                    variant="caption"
+                                                    noWrap
+                                                    sx={{ maxWidth: 180, fontWeight: 700 }}
+                                                >
+                                                    {item.label}
+                                                </Typography>
+                                                <Typography component="span" variant="caption" sx={{ ml: 0.75 }}>
+                                                    ({item.count})
+                                                </Typography>
+                                            </Button>
+                                        ))}
+                                    </Stack>
+                                </Box>
+                            )}
                             <Accordion
                                 expanded={flagsExpanded}
                                 onChange={handleFlagsAccordionChange}

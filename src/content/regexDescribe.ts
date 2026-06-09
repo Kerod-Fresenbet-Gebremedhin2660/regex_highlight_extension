@@ -1,57 +1,60 @@
 import type { RegexFlags } from './RegexHighlighter';
 
-const HIGHLIGHT_COLORS = [
-    '#fde68a',
-    '#fca5a5',
-    '#fdba74',
-    '#f9a8d4',
-    '#c4b5fd',
-    '#93c5fd',
-    '#67e8f9',
-    '#6ee7b7',
-    '#86efac',
-    '#bef264',
-    '#fcd34d',
-    '#fda4af',
-    '#fb7185',
-    '#fb923c',
-    '#fbbf24',
-    '#a3e635',
-    '#4ade80',
-    '#34d399',
-    '#2dd4bf',
-    '#22d3ee',
-    '#38bdf8',
-    '#60a5fa',
-    '#818cf8',
-    '#a78bfa',
-    '#c084fc',
-    '#e879f9',
-    '#f472b6',
-    '#f43f5e',
-    '#ef4444',
-    '#f97316',
-    '#eab308',
-    '#84cc16',
-    '#22c55e',
-    '#10b981',
-    '#14b8a6',
-    '#06b6d4',
-    '#0ea5e9',
-    '#3b82f6',
-    '#6366f1',
-    '#8b5cf6',
-    '#a855f7',
-    '#d946ef',
-    '#ec4899',
-    '#f59e0b',
-    '#65a30d',
-    '#16a34a',
-    '#0d9488',
-    '#0284c7',
-    '#4f46e5',
-    '#9333ea'
+export const HIGHLIGHT_COLORS = [
+    '#fff176',
+    '#ff8a65',
+    '#f06292',
+    '#ba68c8',
+    '#7986cb',
+    '#4fc3f7',
+    '#4dd0e1',
+    '#4db6ac',
+    '#81c784',
+    '#dce775',
+    '#ffd54f',
+    '#a1887f',
+    '#90a4ae',
+    '#ff5252',
+    '#ffab40',
+    '#ffff00',
+    '#b2ff59',
+    '#69f0ae',
+    '#64ffda',
+    '#18ffff',
+    '#40c4ff',
+    '#448aff',
+    '#536dfe',
+    '#7c4dff',
+    '#e040fb',
+    '#ff4081',
+    '#ff1744',
+    '#d50000',
+    '#ff6d00',
+    '#ffd600',
+    '#aeea00',
+    '#00c853',
+    '#00bfa5',
+    '#00b8d4',
+    '#0091ea',
+    '#2962ff',
+    '#304ffe',
+    '#6200ea',
+    '#aa00ff',
+    '#c51162',
+    '#795548',
+    '#607d8b',
+    '#c0ca33',
+    '#00897b',
+    '#5e35b1',
+    '#d81b60',
+    '#f4511e',
+    '#7cb342',
+    '#039be5',
+    '#8e24aa',
+    '#e53935'
 ];
+
+export const getHighlightColor = (index: number) => HIGHLIGHT_COLORS[index % HIGHLIGHT_COLORS.length];
 
 const escapeHtml = (value: string) =>
     value
@@ -352,23 +355,36 @@ export const describeSequence = (seq: string, flags?: RegexFlags): string => {
 export type RegexTranslation = {
     plain: string;
     html: string;
+    items: Array<{
+        index: number;
+        pattern: string;
+        label: string;
+        color: string;
+    }>;
 };
 
 export const translateRegex = (pattern: string, flags: RegexFlags): RegexTranslation => {
     const trimmed = pattern.trim();
     if (!trimmed) {
-        return { plain: '', html: '' };
+        return { plain: '', html: '', items: [] };
     }
     try {
         const parts = splitAlternation(trimmed).filter(Boolean);
         let desc: string;
         let htmlDesc: string;
+        let items: RegexTranslation['items'] = [];
         let flagSuffix = buildFlagDescription(flags);
         if (parts.length > 1) {
             const alts = parts.map((p) => describeSequence(p, flags));
+            items = alts.map((text, index) => ({
+                index,
+                pattern: parts[index],
+                label: text,
+                color: getHighlightColor(index)
+            }));
             const altHtml = alts
                 .map((text, index) => {
-                    const color = HIGHLIGHT_COLORS[index % HIGHLIGHT_COLORS.length];
+                    const color = getHighlightColor(index);
                     return `<span style="background-color: ${color}; color: #000; padding: 0 3px; border-radius: 2px; font-weight: 600;">${escapeHtml(
                         text
                     )}</span>`;
@@ -390,10 +406,10 @@ export const translateRegex = (pattern: string, flags: RegexFlags): RegexTransla
             desc += flagSuffix;
             htmlDesc += escapeHtml(flagSuffix);
         }
-        return { plain: desc, html: htmlDesc };
+        return { plain: desc, html: htmlDesc, items };
     } catch {
         const escaped = escapeHtml(trimmed);
-        return { plain: trimmed, html: escaped };
+        return { plain: trimmed, html: escaped, items: [] };
     }
 };
 

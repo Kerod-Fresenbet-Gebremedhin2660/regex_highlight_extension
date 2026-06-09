@@ -11,7 +11,7 @@ export type MatchEntry = {
     index: number;
     length: number;
     matchType: number | null;
-    span?: HTMLSpanElement;
+    span?: HTMLElement;
 };
 
 type PendingRequest = {
@@ -32,7 +32,7 @@ export type HighlighterState = {
 
 type CallbackEvents = {
     onStateChange?: (state: HighlighterState) => void;
-    onActiveMatchSpanChange?: (span: HTMLSpanElement | null) => void;
+    onActiveMatchSpanChange?: (span: HTMLElement | null) => void;
     onMatchesUpdated?: (matches: MatchEntry[]) => void;
     onPatternRestored?: (pattern: string) => void;
 };
@@ -267,6 +267,18 @@ export class RegexHighlighter {
         this.scrollToMatch(index);
         this.updateScrollbarMarkers();
         this.notifyStateChange();
+    }
+
+    jumpToFirstMatchType(matchType: number) {
+        const selector =
+            this.matchTypes.length > 1
+                ? `.${HIGHLIGHT_CLASS}.regex-highlight-type-${matchType}`
+                : `.${HIGHLIGHT_CLASS}`;
+        const span = document.querySelector(selector) as HTMLElement | null;
+        if (!span) {
+            return;
+        }
+        this.activateMatchElement(span, 'start');
     }
 
     getMatches(): MatchEntry[] {
@@ -603,6 +615,44 @@ export class RegexHighlighter {
         return 0;
     }
 
+    private pruneMatchesBeforeFirstVisible() {
+        if (this.matches.length === 0) {
+            return;
+        }
+
+        const viewportTop = 0;
+        const viewportBottom = window.innerHeight;
+        let firstVisibleIndex = -1;
+        let firstVisibleTop = Infinity;
+
+        this.matches.forEach((match, index) => {
+            const rect = match.span?.getBoundingClientRect();
+            if (!rect) {
+                return;
+            }
+            const elementTop = rect.top;
+            const elementBottom = rect.bottom;
+            if (elementBottom > viewportTop && elementTop < viewportBottom) {
+                if (elementTop < firstVisibleTop) {
+                    firstVisibleTop = elementTop;
+                    firstVisibleIndex = index;
+                }
+            }
+        });
+
+        // If nothing visible (or first visible is already at start), do nothing.
+        if (firstVisibleIndex <= 0) {
+            return;
+        }
+
+        // Remove everything before the first visible match.
+        this.matches.splice(0, firstVisibleIndex);
+
+        if (this.currentIndex >= 0) {
+            this.currentIndex = Math.max(0, this.currentIndex - firstVisibleIndex);
+        }
+    }
+
     private async findMatches() {
         this.matches = [];
         this.matchTypes = [];
@@ -749,14 +799,20 @@ export class RegexHighlighter {
                     if (match.index > lastIndex) {
                         fragment.appendChild(document.createTextNode(text.substring(lastIndex, match.index)));
                     }
-                    const span = document.createElement('span');
+                    const span = document.createElement('a');
                     let className = HIGHLIGHT_CLASS;
                     if (match.matchType !== null && this.matchTypes.length > 1) {
                         className += ` regex-highlight-type-${match.matchType}`;
                     }
                     span.className = className;
+                    span.href = `#regex-highlight-match-${match.originalIndex}`;
+                    span.setAttribute('aria-label', `Jump to regex match ${match.originalIndex + 1}`);
                     span.dataset.matchIndex = String(match.originalIndex);
                     span.textContent = text.substring(match.index, match.index + match.length);
+                    span.addEventListener('click', (event) => {
+                        event.preventDefault();
+                        this.activateMatchElement(span, 'start');
+                    });
                     fragment.appendChild(span);
                     this.matches[match.originalIndex].span = span;
                     lastIndex = match.index + match.length;
@@ -843,7 +899,7 @@ export class RegexHighlighter {
         }
     }
 
-    private scrollToMatch(index: number) {
+    private scrollToMatch(index: number, block: ScrollLogicalPosition = 'center') {
         if (index < 0 || index >= this.matches.length) {
             return;
         }
@@ -851,7 +907,7 @@ export class RegexHighlighter {
         const match = this.matches[index];
         const span =
             match.span ??
-            (document.querySelector(`.${HIGHLIGHT_CLASS}[data-match-index="${index}"]`) as HTMLSpanElement | null);
+            (document.querySelector(`.${HIGHLIGHT_CLASS}[data-match-index="${index}"]`) as HTMLElement | null);
         if (!span) {
             return;
         }
@@ -859,7 +915,30 @@ export class RegexHighlighter {
         this.matches.forEach((entry, idx) => {
             entry.span?.classList.toggle(ACTIVE_CLASS, idx === index);
         });
-        span.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        span.scrollIntoView({ behavior: 'smooth', block });
+        this.callbacks.onActiveMatchSpanChange?.(span);
+        setTimeout(() => {
+            this.isScrollingProgrammatically = false;
+            this.updateScrollbarMarkers();
+        }, 500);
+    }
+
+    private activateMatchElement(span: HTMLElement, block: ScrollLogicalPosition = 'center') {
+        const index = this.matches.findIndex((match) => match.span === span);
+        if (index >= 0) {
+            this.currentIndex = index;
+            this.highlightActiveMatch(index);
+            this.scrollToMatch(index, block);
+            this.updateScrollbarMarkers();
+            this.notifyStateChange();
+            return;
+        }
+
+        this.isScrollingProgrammatically = true;
+        document.querySelectorAll(`.${HIGHLIGHT_CLASS}`).forEach((entry) => {
+            entry.classList.toggle(ACTIVE_CLASS, entry === span);
+        });
+        span.scrollIntoView({ behavior: 'smooth', block });
         this.callbacks.onActiveMatchSpanChange?.(span);
         setTimeout(() => {
             this.isScrollingProgrammatically = false;
@@ -940,12 +1019,16 @@ export class RegexHighlighter {
             this.updateScrollbarMarkers();
             this.callbacks.onActiveMatchSpanChange?.(newSpan ?? null);
         }
+
+        // Keep only matches from the first visible onward.
+        this.pruneMatchesBeforeFirstVisible();
     }
 
     private updateScrollbarMarkers() {
         if (!this.markerContainer) {
             return;
         }
+        this.pruneMatchesBeforeFirstVisible();
         if (this.matches.length === 0) {
             this.clearScrollbarMarkers();
             return;
