@@ -41,6 +41,7 @@ const MARKERS_ID = 'regex-scrollbar-markers';
 const COLLAPSIBLE_SETTING_KEY = 'regex-highlight-setting-collapsibleExpanded';
 const PATTERN_COLLAPSIBLE_SETTING_KEY = 'regex-highlight-setting-patternsExpanded';
 const MINIMIZED_SETTING_KEY = 'regex-highlight-setting-minimized';
+const WHOLE_WORDS_SETTING_KEY = 'regex-highlight-setting-wholeWords';
 
 type OverlayPosition = {
     top: number;
@@ -98,6 +99,7 @@ const ContentApp = () => {
     const [validationError, setValidationError] = useState<string | null>(null);
     const [isMinimized, setIsMinimized] = useState(() => loadBooleanSetting(MINIMIZED_SETTING_KEY, true));
     const [isHidden, setIsHidden] = useState(false);
+    const [wholeWords, setWholeWords] = useState(() => loadBooleanSetting(WHOLE_WORDS_SETTING_KEY, false));
     const [flagsExpanded, setFlagsExpanded] = useState(() =>
         loadBooleanSetting(COLLAPSIBLE_SETTING_KEY, true)
     );
@@ -345,6 +347,13 @@ const ContentApp = () => {
             onPatternRestored: (pattern) => {
                 inputDirtyRef.current = false;
                 setSearchInput(pattern);
+            },
+            onSearchPatternChange: (pattern) => {
+                inputDirtyRef.current = false;
+                setSearchInput(pattern);
+                if (inputRef.current) {
+                    inputRef.current.value = pattern;
+                }
             }
         });
         highlighterRef.current = highlighter;
@@ -424,15 +433,14 @@ const ContentApp = () => {
         }
         setValidationError(null);
         try {
-            // Always apply word boundaries (smart - only adds if not already present)
-            const searchPattern = wrapWithWordBoundaries(pattern);
+            const searchPattern = wholeWords ? wrapWithWordBoundaries(pattern) : pattern;
             await highlighter.search(searchPattern);
             inputDirtyRef.current = false;
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Invalid regex pattern';
             setValidationError(message);
         }
-    }, [searchInput, wrapWithWordBoundaries]);
+    }, [searchInput, wholeWords, wrapWithWordBoundaries]);
 
     const handleClear = useCallback(async () => {
         const highlighter = highlighterRef.current;
@@ -456,6 +464,12 @@ const ContentApp = () => {
         },
         []
     );
+
+    const handleWholeWordsChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+        const checked = event.target.checked;
+        setWholeWords(checked);
+        saveBooleanSetting(WHOLE_WORDS_SETTING_KEY, checked);
+    }, []);
 
     const handleFlagChange = useCallback((flag: keyof RegexFlags) => {
         return (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -558,7 +572,7 @@ const ContentApp = () => {
                 return;
             }
             const key = event.key ? event.key.toLowerCase() : '';
-            if ((event.ctrlKey || event.metaKey) && event.shiftKey && key === 'f') {
+            if (event.metaKey && event.shiftKey && key === 'f') {
                 event.preventDefault();
                 if (isHidden) {
                     setIsHidden(false);
@@ -658,12 +672,12 @@ const ContentApp = () => {
             setIsHidden(false);
         }
 
-        // Auto-search if pattern is long enough (always apply smart word boundaries)
+        // Auto-search if pattern is long enough.
         if (newPattern.length >= 2) {
-            const searchPattern = wrapWithWordBoundaries(newPattern);
+            const searchPattern = wholeWords ? wrapWithWordBoundaries(newPattern) : newPattern;
             void highlighterRef.current?.search(searchPattern);
         }
-    }, [searchInput, escapeRegexChars, isHidden, wrapWithWordBoundaries]);
+    }, [searchInput, escapeRegexChars, isHidden, wholeWords, wrapWithWordBoundaries]);
 
     useEffect(() => {
         const messageHandler = (
@@ -681,7 +695,8 @@ const ContentApp = () => {
                             return true;
                         }
                         setSearchInput(trimmed);
-                        void highlighterRef.current?.search(trimmed).then(
+                        const searchPattern = wholeWords ? wrapWithWordBoundaries(trimmed) : trimmed;
+                        void highlighterRef.current?.search(searchPattern).then(
                             () => sendResponse({ success: true }),
                             () => sendResponse({ success: false })
                         );
@@ -742,7 +757,7 @@ const ContentApp = () => {
                 // Extension context may be invalidated
             }
         };
-    }, [highlighterState, handleAddAlternation]);
+    }, [highlighterState, handleAddAlternation, wholeWords, wrapWithWordBoundaries]);
 
     const renderPatternHistory = () => {
         if (!highlighterState.savedPatterns.length) {
@@ -1012,6 +1027,15 @@ const ContentApp = () => {
                                 }
                                 label="Scroll to first match on search"
                             />
+                            <FormControlLabel
+                                control={
+                                    <Switch
+                                        checked={wholeWords}
+                                        onChange={handleWholeWordsChange}
+                                    />
+                                }
+                                label="Match whole words only"
+                            />
                             {highlightedNavigationItems.length > 0 && (
                                 <Box>
                                     <Typography variant="caption" color="text.secondary" fontWeight={600}>
@@ -1168,4 +1192,3 @@ const ContentApp = () => {
 };
 
 export default ContentApp;
-

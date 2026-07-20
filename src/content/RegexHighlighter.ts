@@ -35,30 +35,56 @@ type CallbackEvents = {
     onActiveMatchSpanChange?: (span: HTMLElement | null) => void;
     onMatchesUpdated?: (matches: MatchEntry[]) => void;
     onPatternRestored?: (pattern: string) => void;
+    onSearchPatternChange?: (pattern: string) => void;
 };
 
 type CollectTextNode = { text: string };
 
+class SearchCancelledError extends Error {
+    constructor() {
+        super('Search cancelled');
+        this.name = 'SearchCancelledError';
+    }
+}
+
 const HIGHLIGHT_CLASS = 'regex-highlight-match';
 const ACTIVE_CLASS = 'regex-highlight-active';
+const HIGHLIGHT_WRAPPER_CLASS = 'regex-highlight-wrapper';
+const REMOVE_BUTTON_CLASS = 'regex-highlight-remove';
 const POSITION_STORAGE_KEY = 'regex-highlight-position';
 const PATTERN_STORAGE_KEY = 'regex-highlight-patterns';
 const SETTINGS_PREFIX = 'regex-highlight-setting-';
 const SEARCH_STATE_KEY = 'regex-search-state';
+const MAX_SCROLLBAR_MARKERS = 400;
+const EXCLUDED_TAG_NAMES = new Set([
+    'SCRIPT',
+    'STYLE',
+    'NOSCRIPT',
+    'TEMPLATE',
+    'INPUT',
+    'TEXTAREA',
+    'SELECT',
+    'OPTION',
+    'BUTTON'
+]);
 
 export class RegexHighlighter {
     private matches: MatchEntry[] = [];
     private currentIndex = -1;
     private searchPattern = '';
     private matchTypes: string[] = [];
+    private matchTypeCounts: Record<string, number> = {};
     private savedPatterns: string[] = [];
     private maxSavedPatterns = 8;
     private worker: Worker | null = null;
     private workerPendingRequests = new Map<number, PendingRequest>();
     private isPerformingSearch = false;
+    private searchGeneration = 0;
     private isScrollingProgrammatically = false;
     private scrollHandler?: () => void;
     private scrollTimeout?: number;
+    private matchVisibilityObserver: IntersectionObserver | null = null;
+    private visibleMatchIndices = new Set<number>();
     private callbacks: CallbackEvents;
     private textNodeMap = new Map<number, Text>();
     private scrollOnSearch: boolean;
@@ -98,9 +124,10 @@ export class RegexHighlighter {
     }
 
     destroy() {
-        void this.clearHighlights();
+        const generation = ++this.searchGeneration;
+        void this.clearHighlights(generation);
+        this.cancelPendingWorkerRequests(false);
         this.worker?.terminate();
-        this.workerPendingRequests.clear();
         if (this.scrollHandler) {
             window.removeEventListener('scroll', this.scrollHandler, true);
         }
@@ -136,7 +163,7 @@ export class RegexHighlighter {
             matchesTotal: this.matches.length,
             currentIndex: this.currentIndex,
             matchTypes: this.matchTypes.slice(),
-            matchTypeCounts: this.computeMatchTypeCounts(),
+            matchTypeCounts: { ...this.matchTypeCounts },
             savedPatterns: this.savedPatterns.slice(),
             regexFlags: { ...this.regexFlags },
             scrollOnSearch: this.scrollOnSearch
@@ -185,6 +212,9 @@ export class RegexHighlighter {
             throw error instanceof Error ? error : new Error('Invalid regex pattern');
         }
 
+        const generation = ++this.searchGeneration;
+        this.cancelPendingWorkerRequests();
+
         this.searchPattern = pattern;
         this.savePattern(pattern);
         this.saveSearchState(pattern);
@@ -192,9 +222,19 @@ export class RegexHighlighter {
         this.isPerformingSearch = true;
 
         try {
-            await this.clearHighlights();
-            await this.findMatches();
-            await this.highlightMatches();
+            if (!(await this.clearHighlights(generation))) {
+                return;
+            }
+            if (!(await this.findMatches(pattern, flags, generation))) {
+                return;
+            }
+            if (!(await this.highlightMatches(generation))) {
+                return;
+            }
+
+            if (!this.isSearchCurrent(generation)) {
+                return;
+            }
 
             this.currentIndex = this.matches.length > 0 ? 0 : -1;
             this.notifyStateChange();
@@ -207,18 +247,42 @@ export class RegexHighlighter {
             this.scheduleSortPatternsByMatchCount();
             this.updateScrollbarMarkers();
         } finally {
-            this.isPerformingSearch = false;
+            if (this.isSearchCurrent(generation)) {
+                this.isPerformingSearch = false;
+            }
         }
     }
 
     async clear() {
-        await this.clearHighlights();
+        const generation = ++this.searchGeneration;
+        this.cancelPendingWorkerRequests();
+        if (!(await this.clearHighlights(generation)) || !this.isSearchCurrent(generation)) {
+            return;
+        }
+        this.isPerformingSearch = false;
         this.searchPattern = '';
         this.currentIndex = -1;
         this.matchTypes = [];
         this.clearSearchState();
         this.notifyStateChange();
         this.clearScrollbarMarkers();
+    }
+
+    private isSearchCurrent(generation: number) {
+        return generation === this.searchGeneration;
+    }
+
+    private cancelPendingWorkerRequests(restartWorker = true) {
+        if (this.workerPendingRequests.size === 0) {
+            return;
+        }
+        this.workerPendingRequests.forEach(({ reject }) => reject(new SearchCancelledError()));
+        this.workerPendingRequests.clear();
+        this.worker?.terminate();
+        this.worker = null;
+        if (restartWorker) {
+            this.initWorker();
+        }
     }
 
     next() {
@@ -253,9 +317,12 @@ export class RegexHighlighter {
         if (index < 0 || index >= this.matches.length) {
             return;
         }
-        this.matches.forEach((match, idx) => {
-            match.span?.classList.toggle(ACTIVE_CLASS, idx === index);
-        });
+        const nextSpan = this.matches[index].span;
+        const activeSpan = document.querySelector(`.${HIGHLIGHT_CLASS}.${ACTIVE_CLASS}`) as HTMLElement | null;
+        if (activeSpan !== nextSpan) {
+            activeSpan?.classList.remove(ACTIVE_CLASS);
+            nextSpan?.classList.add(ACTIVE_CLASS);
+        }
     }
 
     jumpToMatch(index: number) {
@@ -299,7 +366,11 @@ export class RegexHighlighter {
             return null;
         }
         const matchText = match.span.textContent ?? '';
-        const parent = match.span.parentElement;
+        const wrapper = match.span.parentElement?.classList.contains(HIGHLIGHT_WRAPPER_CLASS)
+            ? match.span.parentElement
+            : null;
+        const matchNode = wrapper ?? match.span;
+        const parent = matchNode.parentElement;
         if (!parent) {
             return { before: '', match: matchText, after: '', fullText: matchText };
         }
@@ -307,7 +378,7 @@ export class RegexHighlighter {
         let matchPosition = -1;
         let currentPos = 0;
         parent.childNodes.forEach((child) => {
-            if (child === match.span) {
+            if (child === matchNode) {
                 matchPosition = currentPos;
                 fullText += matchText;
                 currentPos += matchText.length;
@@ -458,9 +529,10 @@ export class RegexHighlighter {
             try {
               const regex = new RegExp(pattern, flags);
               const matches = [];
-              textNodes.forEach((textNode, nodeIndex) => {
+              for (let nodeIndex = 0; nodeIndex < textNodes.length; nodeIndex++) {
+                const textNode = textNodes[nodeIndex];
                 const text = textNode.text;
-                if (!text) return;
+                if (!text) continue;
                 regex.lastIndex = 0;
                 let match;
                 while ((match = regex.exec(text)) !== null) {
@@ -472,11 +544,17 @@ export class RegexHighlighter {
                     length: matchedText.length,
                     matchType: matchType
                   });
+                  if (!flags.includes('g')) {
+                    break;
+                  }
                   if (matchedText.length === 0) {
                     regex.lastIndex++;
                   }
                 }
-              });
+                if (!flags.includes('g') && matches.length > 0) {
+                  break;
+                }
+              }
               self.postMessage({ type: 'matches', matches, requestId });
             } catch (error) {
               self.postMessage({ type: 'error', error: error.message, requestId });
@@ -485,18 +563,24 @@ export class RegexHighlighter {
             try {
               const regex = new RegExp(pattern, flags);
               let count = 0;
-              textNodes.forEach((textNode) => {
+              for (const textNode of textNodes) {
                 const text = textNode.text;
-                if (!text) return;
+                if (!text) continue;
                 regex.lastIndex = 0;
                 let match;
                 while ((match = regex.exec(text)) !== null) {
                   count++;
+                  if (!flags.includes('g')) {
+                    break;
+                  }
                   if (match[0].length === 0) {
                     regex.lastIndex++;
                   }
                 }
-              });
+                if (!flags.includes('g') && count > 0) {
+                  break;
+                }
+              }
               self.postMessage({ type: 'count', count, requestId });
             } catch (error) {
               self.postMessage({ type: 'error', error: error.message, requestId });
@@ -526,6 +610,8 @@ export class RegexHighlighter {
 
             this.worker.onerror = (error) => {
                 console.error('Worker error:', error);
+                this.workerPendingRequests.forEach(({ reject }) => reject(error));
+                this.workerPendingRequests.clear();
                 this.worker = null;
             };
         } catch (error) {
@@ -548,7 +634,7 @@ export class RegexHighlighter {
             return [] as string[];
         }
         let cleanPattern = pattern.trim();
-        if (cleanPattern.startsWith('(') && cleanPattern.endsWith(')')) {
+        if (cleanPattern.startsWith('(') && !cleanPattern.startsWith('(?') && cleanPattern.endsWith(')')) {
             let depth = 0;
             let isWrapped = true;
             for (let i = 0; i < cleanPattern.length; i++) {
@@ -570,6 +656,8 @@ export class RegexHighlighter {
         const parts: string[] = [];
         let currentPart = '';
         let escaped = false;
+        let depth = 0;
+        let inCharacterClass = false;
         for (let i = 0; i < cleanPattern.length; i++) {
             const char = cleanPattern[i];
             if (escaped) {
@@ -578,7 +666,19 @@ export class RegexHighlighter {
             } else if (char === '\\') {
                 currentPart += char;
                 escaped = true;
-            } else if (char === '|') {
+            } else if (char === '[' && !inCharacterClass) {
+                inCharacterClass = true;
+                currentPart += char;
+            } else if (char === ']' && inCharacterClass) {
+                inCharacterClass = false;
+                currentPart += char;
+            } else if (!inCharacterClass && char === '(') {
+                depth++;
+                currentPart += char;
+            } else if (!inCharacterClass && char === ')') {
+                depth = Math.max(0, depth - 1);
+                currentPart += char;
+            } else if (char === '|' && depth === 0 && !inCharacterClass) {
                 parts.push(currentPart.trim());
                 currentPart = '';
             } else {
@@ -591,11 +691,28 @@ export class RegexHighlighter {
         return alternatives.length > 1 ? alternatives : [];
     }
 
-    private determineMatchType(matchedText: string, alternatives: string[]) {
+    private async removeMatchTypeFromSearch(matchType: number | null) {
+        if (this.isPerformingSearch) {
+            return;
+        }
+
+        const alternatives = this.extractAlternatives(this.searchPattern);
+        if (alternatives.length <= 1 || matchType === null || !alternatives[matchType]) {
+            await this.clear();
+            this.callbacks.onSearchPatternChange?.('');
+            return;
+        }
+
+        const nextPattern = alternatives.filter((_, index) => index !== matchType).join('|');
+        this.callbacks.onSearchPatternChange?.(nextPattern);
+        await this.search(nextPattern);
+    }
+
+    private determineMatchType(matchedText: string, alternatives: string[], ignoreCase = this.regexFlags.ignoreCase) {
         if (alternatives.length === 0) {
             return null;
         }
-        const altFlags = this.regexFlags.ignoreCase ? 'i' : '';
+        const altFlags = ignoreCase ? 'i' : '';
         for (let i = 0; i < alternatives.length; i++) {
             try {
                 const regex = new RegExp(`^${alternatives[i]}$`, altFlags);
@@ -603,7 +720,7 @@ export class RegexHighlighter {
                     return i;
                 }
             } catch (error) {
-                if (this.regexFlags.ignoreCase) {
+                if (ignoreCase) {
                     if (matchedText.toLowerCase() === alternatives[i].toLowerCase()) {
                         return i;
                     }
@@ -615,57 +732,18 @@ export class RegexHighlighter {
         return 0;
     }
 
-    private pruneMatchesBeforeFirstVisible() {
-        if (this.matches.length === 0) {
-            return;
-        }
-
-        const viewportTop = 0;
-        const viewportBottom = window.innerHeight;
-        let firstVisibleIndex = -1;
-        let firstVisibleTop = Infinity;
-
-        this.matches.forEach((match, index) => {
-            const rect = match.span?.getBoundingClientRect();
-            if (!rect) {
-                return;
-            }
-            const elementTop = rect.top;
-            const elementBottom = rect.bottom;
-            if (elementBottom > viewportTop && elementTop < viewportBottom) {
-                if (elementTop < firstVisibleTop) {
-                    firstVisibleTop = elementTop;
-                    firstVisibleIndex = index;
-                }
-            }
-        });
-
-        // If nothing visible (or first visible is already at start), do nothing.
-        if (firstVisibleIndex <= 0) {
-            return;
-        }
-
-        // Remove everything before the first visible match.
-        this.matches.splice(0, firstVisibleIndex);
-
-        if (this.currentIndex >= 0) {
-            this.currentIndex = Math.max(0, this.currentIndex - firstVisibleIndex);
-        }
-    }
-
-    private async findMatches() {
-        this.matches = [];
-        this.matchTypes = [];
-        const flags = this.getRegexFlagsString();
-        const alternatives = this.extractAlternatives(this.searchPattern);
-        if (alternatives.length > 0) {
-            this.matchTypes = alternatives;
-        }
+    private async findMatches(pattern: string, flags: string, generation: number) {
+        const nextMatches: MatchEntry[] = [];
+        const alternatives = this.extractAlternatives(pattern);
+        const nextMatchTypes = alternatives.length > 0 ? alternatives : [];
+        const ignoreCase = flags.includes('i');
 
         const overlay = this.overlayElement;
         const textNodes: CollectTextNode[] = [];
-        this.textNodeMap = new Map();
-        await this.collectTextNodesInBatches(overlay, textNodes, this.textNodeMap);
+        const textNodeMap = new Map<number, Text>();
+        if (!(await this.collectTextNodesInBatches(overlay, textNodes, textNodeMap, generation))) {
+            return false;
+        }
 
         if (this.worker && textNodes.length > 0) {
             try {
@@ -675,7 +753,7 @@ export class RegexHighlighter {
                 });
                 this.worker.postMessage({
                     type: 'findMatches',
-                    pattern: this.searchPattern,
+                    pattern,
                     flags,
                     textNodes,
                     alternatives,
@@ -687,10 +765,13 @@ export class RegexHighlighter {
                     length: number;
                     matchType: number | null;
                 }[];
+                if (!this.isSearchCurrent(generation)) {
+                    return false;
+                }
                 workerMatches.forEach((match) => {
-                    const node = this.textNodeMap.get(match.nodeIndex);
+                    const node = textNodeMap.get(match.nodeIndex);
                     if (node) {
-                        this.matches.push({
+                        nextMatches.push({
                             node,
                             index: match.index,
                             length: match.length,
@@ -698,56 +779,104 @@ export class RegexHighlighter {
                         });
                     }
                 });
-                return;
+                this.matches = nextMatches;
+                this.matchTypes = nextMatchTypes;
+                this.matchTypeCounts = this.computeMatchTypeCounts(nextMatches, nextMatchTypes);
+                this.textNodeMap = textNodeMap;
+                return true;
             } catch (error) {
+                if (!this.isSearchCurrent(generation) || error instanceof SearchCancelledError) {
+                    return false;
+                }
                 console.warn('Worker error, falling back to main thread:', error);
             }
         }
 
-        const regex = new RegExp(this.searchPattern, flags);
-        textNodes.forEach((textNode, nodeIndex) => {
-            const node = this.textNodeMap.get(nodeIndex);
-            if (!node) {
-                return;
+        const regex = new RegExp(pattern, flags);
+        const isGlobal = flags.includes('g');
+        const BATCH_SIZE = 100;
+        let foundNonGlobalMatch = false;
+        for (let start = 0; start < textNodes.length && !foundNonGlobalMatch; start += BATCH_SIZE) {
+            if (!this.isSearchCurrent(generation)) {
+                return false;
             }
-            const text = textNode.text;
-            if (!text) {
-                return;
-            }
-            let match: RegExpExecArray | null;
-            regex.lastIndex = 0;
-            while ((match = regex.exec(text)) !== null) {
-                const matchedText = match[0];
-                const matchType = this.determineMatchType(matchedText, alternatives);
-                this.matches.push({
-                    node,
-                    index: match.index,
-                    length: matchedText.length,
-                    matchType
-                });
-                if (matchedText.length === 0) {
-                    regex.lastIndex++;
+            const end = Math.min(start + BATCH_SIZE, textNodes.length);
+            for (let nodeIndex = start; nodeIndex < end; nodeIndex++) {
+                const node = textNodeMap.get(nodeIndex);
+                const text = textNodes[nodeIndex]?.text;
+                if (!node || !text) {
+                    continue;
+                }
+                let match: RegExpExecArray | null;
+                regex.lastIndex = 0;
+                while ((match = regex.exec(text)) !== null) {
+                    const matchedText = match[0];
+                    const matchType = this.determineMatchType(matchedText, alternatives, ignoreCase);
+                    nextMatches.push({
+                        node,
+                        index: match.index,
+                        length: matchedText.length,
+                        matchType
+                    });
+                    if (!isGlobal) {
+                        foundNonGlobalMatch = true;
+                        break;
+                    }
+                    if (matchedText.length === 0) {
+                        regex.lastIndex++;
+                    }
+                }
+                if (foundNonGlobalMatch) {
+                    break;
                 }
             }
-        });
+            if (!foundNonGlobalMatch && end < textNodes.length) {
+                // eslint-disable-next-line no-await-in-loop
+                await new Promise((resolve) => setTimeout(resolve, 0));
+            }
+        }
+
+        if (!this.isSearchCurrent(generation)) {
+            return false;
+        }
+        this.matches = nextMatches;
+        this.matchTypes = nextMatchTypes;
+        this.matchTypeCounts = this.computeMatchTypeCounts(nextMatches, nextMatchTypes);
+        this.textNodeMap = textNodeMap;
+        return true;
     }
 
     private collectTextNodesInBatches(
         overlay: HTMLElement | null,
         textNodes: CollectTextNode[],
-        textNodeMap: Map<number, Text>
+        textNodeMap: Map<number, Text>,
+        generation?: number
     ) {
-        return new Promise<void>((resolve) => {
-            const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
+        return new Promise<boolean>((resolve) => {
+            const walker = document.createTreeWalker(
+                document.body,
+                NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT,
+                {
+                    acceptNode: (node) => {
+                        if (node.nodeType === Node.ELEMENT_NODE) {
+                            return this.shouldExcludeElement(node as HTMLElement, overlay)
+                                ? NodeFilter.FILTER_REJECT
+                                : NodeFilter.FILTER_SKIP;
+                        }
+                        return NodeFilter.FILTER_ACCEPT;
+                    }
+                }
+            );
             const BATCH_SIZE = 100;
             let node: Text | null;
 
             const processBatch = () => {
+                if (generation !== undefined && !this.isSearchCurrent(generation)) {
+                    resolve(false);
+                    return;
+                }
                 let count = 0;
                 while (count < BATCH_SIZE && (node = walker.nextNode() as Text | null)) {
-                    if (overlay && overlay.contains(node)) {
-                        continue;
-                    }
                     const text = node.textContent;
                     if (text && text.trim()) {
                         const index = textNodes.length;
@@ -759,14 +888,39 @@ export class RegexHighlighter {
                 if (node) {
                     setTimeout(processBatch, 0);
                 } else {
-                    resolve();
+                    resolve(true);
                 }
             };
             processBatch();
         });
     }
 
-    private async highlightMatches() {
+    private shouldExcludeElement(element: HTMLElement, overlay: HTMLElement | null) {
+        if (element === overlay || (overlay && overlay.contains(element))) {
+            return true;
+        }
+        if (EXCLUDED_TAG_NAMES.has(element.tagName) || element.namespaceURI !== document.documentElement.namespaceURI) {
+            return true;
+        }
+        if (
+            element.hidden ||
+            element.inert ||
+            element.getAttribute('aria-hidden') === 'true' ||
+            (element.hasAttribute('contenteditable') && element.getAttribute('contenteditable') !== 'false')
+        ) {
+            return true;
+        }
+        const style = window.getComputedStyle(element);
+        return (
+            style.display === 'none' ||
+            style.visibility === 'hidden' ||
+            style.visibility === 'collapse' ||
+            style.contentVisibility === 'hidden' ||
+            Number.parseFloat(style.opacity) === 0
+        );
+    }
+
+    private async highlightMatches(generation: number) {
         const matchesByNode = new Map<Text, (MatchEntry & { originalIndex: number })[]>();
         this.matches.forEach((match, idx) => {
             const nodeMatches = matchesByNode.get(match.node) ?? [];
@@ -777,10 +931,16 @@ export class RegexHighlighter {
         const nodes = Array.from(matchesByNode.keys());
         const BATCH_SIZE = 50;
         for (let i = 0; i < nodes.length; i += BATCH_SIZE) {
+            if (!this.isSearchCurrent(generation)) {
+                return false;
+            }
             const batch = nodes.slice(i, i + BATCH_SIZE);
             if (i > 0) {
                 // eslint-disable-next-line no-await-in-loop
                 await new Promise((resolve) => requestAnimationFrame(resolve));
+            }
+            if (!this.isSearchCurrent(generation)) {
+                return false;
             }
             batch.forEach((node) => {
                 const nodeMatches = matchesByNode.get(node);
@@ -799,6 +959,9 @@ export class RegexHighlighter {
                     if (match.index > lastIndex) {
                         fragment.appendChild(document.createTextNode(text.substring(lastIndex, match.index)));
                     }
+                    const wrapper = document.createElement('span');
+                    wrapper.className = HIGHLIGHT_WRAPPER_CLASS;
+
                     const span = document.createElement('a');
                     let className = HIGHLIGHT_CLASS;
                     if (match.matchType !== null && this.matchTypes.length > 1) {
@@ -813,7 +976,21 @@ export class RegexHighlighter {
                         event.preventDefault();
                         this.activateMatchElement(span, 'start');
                     });
-                    fragment.appendChild(span);
+
+                    const removeButton = document.createElement('button');
+                    removeButton.type = 'button';
+                    removeButton.className = REMOVE_BUTTON_CLASS;
+                    removeButton.textContent = '×';
+                    removeButton.setAttribute('aria-label', `Remove "${span.textContent}" from search`);
+                    removeButton.title = 'Remove from search';
+                    removeButton.addEventListener('click', (event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        void this.removeMatchTypeFromSearch(match.matchType);
+                    });
+
+                    wrapper.append(span, removeButton);
+                    fragment.appendChild(wrapper);
                     this.matches[match.originalIndex].span = span;
                     lastIndex = match.index + match.length;
                 });
@@ -824,33 +1001,51 @@ export class RegexHighlighter {
             });
         }
         this.callbacks.onMatchesUpdated?.(this.matches);
+        return true;
     }
 
-    private async clearHighlights() {
+    private async clearHighlights(generation?: number) {
+        this.teardownScrollTracking();
         const highlights = document.querySelectorAll(`.${HIGHLIGHT_CLASS}`);
         const parentsToNormalize = new Set<Node>();
         const highlightArray = Array.from(highlights);
         const BATCH_SIZE = 100;
         for (let i = 0; i < highlightArray.length; i += BATCH_SIZE) {
+            if (generation !== undefined && !this.isSearchCurrent(generation)) {
+                return false;
+            }
             const batch = highlightArray.slice(i, i + BATCH_SIZE);
             if (i > 0) {
                 // eslint-disable-next-line no-await-in-loop
                 await new Promise((resolve) => requestAnimationFrame(resolve));
             }
+            if (generation !== undefined && !this.isSearchCurrent(generation)) {
+                return false;
+            }
             batch.forEach((span) => {
-                const parent = span.parentNode;
+                const wrapper = span.parentElement?.classList.contains(HIGHLIGHT_WRAPPER_CLASS)
+                    ? span.parentElement
+                    : null;
+                const nodeToReplace = wrapper ?? span;
+                const parent = nodeToReplace.parentNode;
                 if (parent) {
-                    parent.replaceChild(document.createTextNode(span.textContent ?? ''), span);
+                    parent.replaceChild(document.createTextNode(span.textContent ?? ''), nodeToReplace);
                     parentsToNormalize.add(parent);
                 }
             });
         }
         const parentsArray = Array.from(parentsToNormalize);
         for (let i = 0; i < parentsArray.length; i += BATCH_SIZE) {
+            if (generation !== undefined && !this.isSearchCurrent(generation)) {
+                return false;
+            }
             const batch = parentsArray.slice(i, i + BATCH_SIZE);
             if (i > 0) {
                 // eslint-disable-next-line no-await-in-loop
                 await new Promise((resolve) => requestAnimationFrame(resolve));
+            }
+            if (generation !== undefined && !this.isSearchCurrent(generation)) {
+                return false;
             }
             batch.forEach((parent) => {
                 if ('normalize' in parent && typeof (parent as ParentNode).normalize === 'function') {
@@ -858,33 +1053,34 @@ export class RegexHighlighter {
                 }
             });
         }
-        if (this.scrollHandler) {
-            window.removeEventListener('scroll', this.scrollHandler, true);
-            this.scrollHandler = undefined;
-        }
-        if (this.scrollTimeout) {
-            clearTimeout(this.scrollTimeout);
-            this.scrollTimeout = undefined;
-        }
         this.matches = [];
         this.currentIndex = -1;
         this.matchTypes = [];
+        this.matchTypeCounts = {};
         this.callbacks.onMatchesUpdated?.(this.matches);
+        return true;
     }
 
     private async rerunActiveSearch() {
         if (!this.searchPattern.trim()) {
             return;
         }
-        if (this.isPerformingSearch) {
-            return;
-        }
+        const pattern = this.searchPattern;
+        const flags = this.getRegexFlagsString();
+        const generation = ++this.searchGeneration;
+        this.cancelPendingWorkerRequests();
         this.isPerformingSearch = true;
 
         try {
-            await this.clearHighlights();
-            await this.findMatches();
-            await this.highlightMatches();
+            if (!(await this.clearHighlights(generation))) {
+                return;
+            }
+            if (!(await this.findMatches(pattern, flags, generation))) {
+                return;
+            }
+            if (!(await this.highlightMatches(generation)) || !this.isSearchCurrent(generation)) {
+                return;
+            }
             this.currentIndex = this.matches.length > 0 ? 0 : -1;
             if (this.currentIndex >= 0 && this.scrollOnSearch) {
                 this.scrollToMatch(this.currentIndex);
@@ -895,7 +1091,9 @@ export class RegexHighlighter {
         } catch (error) {
             console.warn('Could not refresh regex highlights:', error);
         } finally {
-            this.isPerformingSearch = false;
+            if (this.isSearchCurrent(generation)) {
+                this.isPerformingSearch = false;
+            }
         }
     }
 
@@ -912,9 +1110,7 @@ export class RegexHighlighter {
             return;
         }
         match.span = span;
-        this.matches.forEach((entry, idx) => {
-            entry.span?.classList.toggle(ACTIVE_CLASS, idx === index);
-        });
+        this.highlightActiveMatch(index);
         span.scrollIntoView({ behavior: 'smooth', block });
         this.callbacks.onActiveMatchSpanChange?.(span);
         setTimeout(() => {
@@ -947,13 +1143,11 @@ export class RegexHighlighter {
     }
 
     private setupScrollTracking() {
-        if (this.scrollHandler) {
-            window.removeEventListener('scroll', this.scrollHandler, true);
-        }
+        this.teardownScrollTracking();
         if (this.matches.length === 0) {
             return;
         }
-        this.scrollHandler = () => {
+        const scheduleUpdate = () => {
             if (this.isScrollingProgrammatically) {
                 return;
             }
@@ -964,8 +1158,48 @@ export class RegexHighlighter {
                 this.updateActiveMatchFromScroll();
             }, 100);
         };
+
+        if ('IntersectionObserver' in window) {
+            this.matchVisibilityObserver = new IntersectionObserver((entries) => {
+                entries.forEach((entry) => {
+                    const index = Number((entry.target as HTMLElement).dataset.matchIndex);
+                    if (!Number.isInteger(index)) {
+                        return;
+                    }
+                    if (entry.isIntersecting) {
+                        this.visibleMatchIndices.add(index);
+                    } else {
+                        this.visibleMatchIndices.delete(index);
+                    }
+                });
+                scheduleUpdate();
+            });
+            this.matches.forEach((match) => {
+                if (match.span) {
+                    this.matchVisibilityObserver?.observe(match.span);
+                }
+            });
+        }
+
+        this.scrollHandler = () => {
+            scheduleUpdate();
+        };
         window.addEventListener('scroll', this.scrollHandler, true);
         setTimeout(() => this.updateActiveMatchFromScroll(), 200);
+    }
+
+    private teardownScrollTracking() {
+        if (this.scrollHandler) {
+            window.removeEventListener('scroll', this.scrollHandler, true);
+            this.scrollHandler = undefined;
+        }
+        if (this.scrollTimeout) {
+            clearTimeout(this.scrollTimeout);
+            this.scrollTimeout = undefined;
+        }
+        this.matchVisibilityObserver?.disconnect();
+        this.matchVisibilityObserver = null;
+        this.visibleMatchIndices.clear();
     }
 
     private updateActiveMatchFromScroll() {
@@ -976,7 +1210,15 @@ export class RegexHighlighter {
         const viewportBottom = window.innerHeight;
         let firstVisibleIndex = -1;
         let firstVisibleTop = Infinity;
-        this.matches.forEach((match, index) => {
+        const candidateIndices = this.matchVisibilityObserver
+            ? Array.from(this.visibleMatchIndices)
+            : this.matches.map((_, index) => index);
+
+        candidateIndices.forEach((index) => {
+            const match = this.matches[index];
+            if (!match) {
+                return;
+            }
             const rect = match.span?.getBoundingClientRect();
             if (!rect) {
                 return;
@@ -992,7 +1234,11 @@ export class RegexHighlighter {
         });
         if (firstVisibleIndex === -1) {
             let minTopInViewport = Infinity;
-            this.matches.forEach((match, index) => {
+            candidateIndices.forEach((index) => {
+                const match = this.matches[index];
+                if (!match) {
+                    return;
+                }
                 const rect = match.span?.getBoundingClientRect();
                 if (!rect) {
                     return;
@@ -1019,16 +1265,12 @@ export class RegexHighlighter {
             this.updateScrollbarMarkers();
             this.callbacks.onActiveMatchSpanChange?.(newSpan ?? null);
         }
-
-        // Keep only matches from the first visible onward.
-        this.pruneMatchesBeforeFirstVisible();
     }
 
     private updateScrollbarMarkers() {
         if (!this.markerContainer) {
             return;
         }
-        this.pruneMatchesBeforeFirstVisible();
         if (this.matches.length === 0) {
             this.clearScrollbarMarkers();
             return;
@@ -1058,7 +1300,9 @@ export class RegexHighlighter {
             return;
         }
         const scrollbarTrackHeight = viewportHeight - 20;
-        this.matches.forEach((match, index) => {
+        const markerFragment = document.createDocumentFragment();
+        this.getMarkerMatchIndices().forEach((index) => {
+            const match = this.matches[index];
             const span = match.span;
             if (!span) {
                 return;
@@ -1096,8 +1340,25 @@ export class RegexHighlighter {
                 this.scrollToMatch(index);
                 this.notifyStateChange();
             });
-            container.appendChild(marker);
+            markerFragment.appendChild(marker);
         });
+        container.appendChild(markerFragment);
+    }
+
+    private getMarkerMatchIndices() {
+        if (this.matches.length <= MAX_SCROLLBAR_MARKERS) {
+            return this.matches.map((_, index) => index);
+        }
+
+        const indices = new Set<number>();
+        const sampleSlots = Math.max(2, MAX_SCROLLBAR_MARKERS - 1);
+        for (let slot = 0; slot < sampleSlots; slot++) {
+            indices.add(Math.round((slot * (this.matches.length - 1)) / (sampleSlots - 1)));
+        }
+        if (this.currentIndex >= 0) {
+            indices.add(this.currentIndex);
+        }
+        return Array.from(indices).sort((a, b) => a - b);
     }
 
     private getMarkerColor(typeIndex: number) {
@@ -1141,7 +1402,11 @@ export class RegexHighlighter {
             return '';
         }
         const matchText = match.span.textContent ?? '';
-        const parent = match.span.parentElement;
+        const wrapper = match.span.parentElement?.classList.contains(HIGHLIGHT_WRAPPER_CLASS)
+            ? match.span.parentElement
+            : null;
+        const matchNode = wrapper ?? match.span;
+        const parent = matchNode.parentElement;
         if (!parent) {
             return matchText;
         }
@@ -1149,7 +1414,7 @@ export class RegexHighlighter {
         let matchPosition = -1;
         let currentPos = 0;
         parent.childNodes.forEach((child) => {
-            if (child === match.span) {
+            if (child === matchNode) {
                 matchPosition = currentPos;
                 fullText += matchText;
                 currentPos += matchText.length;
@@ -1327,14 +1592,14 @@ export class RegexHighlighter {
         return window.location.hostname;
     }
 
-    private computeMatchTypeCounts() {
+    private computeMatchTypeCounts(matches = this.matches, matchTypes = this.matchTypes) {
         const counts: Record<string, number> = {};
-        if (this.matchTypes.length <= 1) {
+        if (matchTypes.length <= 1) {
             return counts;
         }
-        this.matches.forEach((match) => {
-            if (match.matchType !== null && this.matchTypes[match.matchType]) {
-                const key = this.matchTypes[match.matchType];
+        matches.forEach((match) => {
+            if (match.matchType !== null && matchTypes[match.matchType]) {
+                const key = matchTypes[match.matchType];
                 counts[key] = (counts[key] ?? 0) + 1;
             }
         });
@@ -1400,10 +1665,7 @@ export class RegexHighlighter {
                         return;
                     }
                     if (state.domain !== currentDomain) {
-                        this.clearSearchState();
-                        void this.clearHighlights();
-                        this.searchPattern = '';
-                        this.notifyStateChange();
+                        void this.clear();
                         return;
                     }
                     navigationTimeout = setTimeout(() => {
@@ -1676,27 +1938,36 @@ export class RegexHighlighter {
                 const count = (await promise) as number;
                 return count;
             } catch (error) {
+                if (error instanceof SearchCancelledError) {
+                    return 0;
+                }
                 console.warn('Worker error, falling back to main thread for counting:', error);
             }
         }
         const regex = new RegExp(pattern, flags);
+        const isGlobal = flags.includes('g');
         let count = 0;
-        textNodes.forEach((textNode) => {
+        for (const textNode of textNodes) {
             const text = textNode.text;
             if (!text) {
-                return;
+                continue;
             }
             let match: RegExpExecArray | null;
             regex.lastIndex = 0;
             // eslint-disable-next-line no-cond-assign
             while ((match = regex.exec(text)) !== null) {
                 count++;
+                if (!isGlobal) {
+                    break;
+                }
                 if (match[0].length === 0) {
                     regex.lastIndex++;
                 }
             }
-        });
+            if (!isGlobal && count > 0) {
+                break;
+            }
+        }
         return count;
     }
 }
-

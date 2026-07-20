@@ -8,7 +8,7 @@ A browser extension that enables regex-based text highlighting and navigation on
 - 🎨 **Visual Highlighting**: All matches are highlighted in yellow, with the active match highlighted in orange
 - ⬅️➡️ **Navigation Controls**: Previous and Next buttons to cycle through matches
 - ⌨️ **Keyboard Shortcuts**: 
-  - `Ctrl/Cmd + Shift + F`: Focus search input / toggle widget
+  - `Cmd + Shift + F`: Focus search input / toggle widget
   - `F3`: Go to next match
   - `Shift + F3`: Go to previous match
 - 📊 **Match Counter**: Shows current position and total matches (e.g., "3 / 15")

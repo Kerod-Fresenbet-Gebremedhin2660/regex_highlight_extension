@@ -331,7 +331,7 @@ const PopupApp = () => {
                     </Stack>
                     <Box>
                         <Typography variant="body2" color="text.secondary">
-                            Ctrl/Cmd + Shift + F
+                            Cmd + Shift + F
                         </Typography>
                         <Typography variant="caption" color="text.secondary">
                             Toggle the widget (expand if minimized, minimize if open)

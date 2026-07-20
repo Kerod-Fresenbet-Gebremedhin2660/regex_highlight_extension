@@ -12,6 +12,54 @@
     transition: background-color 0.2s ease, box-shadow 0.2s ease;
 }
 
+.regex-highlight-wrapper {
+    position: relative !important;
+}
+
+.regex-highlight-remove {
+    all: initial !important;
+    position: absolute !important;
+    z-index: 2147483647 !important;
+    top: -10px !important;
+    right: -10px !important;
+    box-sizing: border-box !important;
+    width: 17px !important;
+    height: 17px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border: 1px solid #fff !important;
+    border-radius: 999px !important;
+    background: #d32f2f !important;
+    color: #fff !important;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35) !important;
+    cursor: pointer !important;
+    font-family: Arial, sans-serif !important;
+    font-size: 14px !important;
+    font-weight: 700 !important;
+    line-height: 1 !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+    transform: scale(0.85) !important;
+    transition: opacity 0.12s ease, transform 0.12s ease !important;
+}
+
+.regex-highlight-wrapper:hover > .regex-highlight-remove,
+.regex-highlight-wrapper:focus-within > .regex-highlight-remove {
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+    transform: scale(1) !important;
+}
+
+.regex-highlight-remove:hover,
+.regex-highlight-remove:focus-visible {
+    background: #b71c1c !important;
+    outline: 2px solid #fff !important;
+    outline-offset: 1px !important;
+}
+
 .regex-highlight-active {
     background-color: #ffb74d !important;
     box-shadow: 0 0 0 2px rgba(255, 183, 77, 0.45);
